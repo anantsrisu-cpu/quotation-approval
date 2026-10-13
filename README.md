@@ -51,6 +51,12 @@ A quotation approval workflow. A preparer enters the request and attaches the qu
 - สถานะปัญหา (bug status): ข้อผิดพลาดที่ผู้ใช้เจอถูกบันทึกอัตโนมัติ พร้อมหน้าและการกระทำ
 - ดูมุมมองผู้ใช้ (view as user): เห็นสิ่งที่ผู้ใช้คนนั้นเห็น และสิ่งที่อาจทำให้เขาใช้งานติดขัด
 
+**ติดตั้งเป็นแอปบนมือถือ · Install on phones (PWA)**
+- Android (Chrome): เปิดลิงก์แอป → จะมีปุ่ม **ติดตั้งแอปบนหน้าจอหลัก** ในแบนเนอร์ หรือเมนู ⋮ → **ติดตั้งแอป / Add to Home screen**
+- iPhone/iPad (Safari): ปุ่ม **แชร์** → **เพิ่มไปยังหน้าจอโฮม (Add to Home Screen)** → **เพิ่ม**
+- วิธีติดตั้งแสดงในแอปที่ “บัญชีและลายเซ็นของฉัน” และแบนเนอร์บนมือถือ (กด “ไม่ใช่ตอนนี้” เพื่อซ่อน)
+- ไฟล์ที่เกี่ยวข้อง: `app/manifest.ts`, `public/sw.js` (ไม่เก็บแคช จึงเห็นข้อมูลล่าสุดเสมอ), `public/icon-*.png`, `public/apple-touch-icon.png`, `components/Pwa.tsx`
+
 **ความปลอดภัย · Security** — ทุกการเปลี่ยนสถานะคำขอทำผ่านฟังก์ชันในฐานข้อมูล ยอดเงิน ผู้อนุมัติ และลายเซ็นจึงแก้จากเบราว์เซอร์ไม่ได้; ผู้ใช้เห็นเฉพาะคำขอที่ตนเกี่ยวข้อง (Row Level Security)
 Every state change goes through database functions, so amounts, approvers and signatures can't be altered from the browser. Row Level Security limits each person to the requests they're involved in.
 

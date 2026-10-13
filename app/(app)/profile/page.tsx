@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useApp } from '@/components/AppProvider';
 import { SignaturePad, imageToSignature, type PadHandle } from '@/components/SignaturePad';
 import { PageHead } from '@/components/ui';
+import { InstallApp } from '@/components/Pwa';
 import { ROLE_TH } from '@/lib/format';
 
 export default function ProfilePage() {
@@ -45,6 +46,8 @@ export default function ProfilePage() {
             <div><dt>ตำแหน่งอนุมัติ · Approver position</dt><dd>{me.position ? posTh(me.position) : '—'}</dd></div>
           </dl>
           <span className="note">ต้องการแก้ไขข้อมูลหรือบทบาท ติดต่อผู้ดูแลระบบ · Ask the admin to change your details or roles.</span>
+          <h2 style={{ marginTop: 8 }}>ติดตั้งแอปบนมือถือ · Install on your phone</h2>
+          <InstallApp />
         </div>
         <div className="card side" style={{ border: '2px solid var(--brown)' }}>
           <h2>ลายเซ็น · Signature</h2>
