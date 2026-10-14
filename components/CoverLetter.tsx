@@ -24,20 +24,21 @@ export const CoverLetter = forwardRef<HTMLElement, { r: RequestRow; steps: Reque
   return (
     <article className="letter" ref={ref} aria-label="หนังสืออนุมัติใบเสนอราคา">
       {draft && <span className="wm" aria-hidden="true">ร่าง · DRAFT</span>}
-      <header style={{ display: 'flex', justifyContent: 'space-between', gap: 20, borderBottom: '2px solid #111', paddingBottom: 14 }}>
-        <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+      {/* letterhead: company name far left · logo centred (large) · reference & date right */}
+      <header style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: 16, borderBottom: '2px solid #111', paddingBottom: 14 }}>
+        <div style={{ lineHeight: 1.35, textAlign: 'left', minWidth: 0 }}>
+          <div style={{ fontSize: 17, fontWeight: 700 }}>{co?.th}</div>
+          <div style={{ fontSize: 13, fontWeight: 600 }}>{co?.en}</div>
+          <div style={{ fontSize: 11.5, color: '#444' }}>{co?.address}</div>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'center' }}>
           {logo ? (
-            <img className="logo-img" src={logo} alt="" crossOrigin="anonymous" />
+            <img className="letter-logo" src={logo} alt="" crossOrigin="anonymous" />
           ) : (
-            <div style={{ width: 62, height: 62, borderRadius: 10, background: 'var(--brown)', color: '#fff', fontFamily: 'var(--f-ui)', fontWeight: 700, fontSize: 20, display: 'grid', placeItems: 'center' }}>
+            <div style={{ width: 110, height: 110, borderRadius: 16, background: 'var(--brown)', color: '#fff', fontFamily: 'var(--f-ui)', fontWeight: 700, fontSize: 36, display: 'grid', placeItems: 'center' }}>
               {co?.initials || 'CO'}
             </div>
           )}
-          <div style={{ lineHeight: 1.35 }}>
-            <div style={{ fontSize: 18, fontWeight: 700 }}>{co?.th}</div>
-            <div style={{ fontSize: 14, fontWeight: 600 }}>{co?.en}</div>
-            <div style={{ fontSize: 12, color: '#444' }}>{co?.address}</div>
-          </div>
         </div>
         <div style={{ textAlign: 'right', fontSize: 13, lineHeight: 1.5 }}>
           เลขที่ · Ref: <b>{r.no ? `${r.no}/AP` : '(ยังไม่ออกเลข)'}</b><br />
