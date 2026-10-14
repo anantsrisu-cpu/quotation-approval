@@ -1,5 +1,5 @@
 'use client';
-import { forwardRef, useLayoutEffect, useRef } from 'react';
+import { forwardRef, useLayoutEffect, useRef, useState } from 'react';
 import { useApp } from './AppProvider';
 import { PURP, SUBJ, bahtText, dOnly, enDate, fmt, fmtQty, thDate, verifyCode } from '@/lib/format';
 import type { RequestRow, RequestStep } from '@/lib/types';
@@ -28,6 +28,27 @@ function FitLine({ children, size, weight = 400, color }: { children: React.Reac
   );
 }
 
+/** Logo scaled up or down to fill a 265×110 px box (70 × 29 mm on A4) without distortion. */
+const LOGO_MAX_W = 265;
+const LOGO_MAX_H = 110;
+function LetterLogo({ src }: { src: string }) {
+  const [size, setSize] = useState<{ w: number; h: number } | null>(null);
+  return (
+    <img
+      src={src}
+      alt=""
+      crossOrigin="anonymous"
+      onLoad={(e) => {
+        const { naturalWidth: nw, naturalHeight: nh } = e.currentTarget;
+        if (!nw || !nh) return;
+        const s = Math.min(LOGO_MAX_W / nw, LOGO_MAX_H / nh);
+        setSize({ w: Math.round(nw * s), h: Math.round(nh * s) });
+      }}
+      style={{ display: 'block', objectFit: 'contain', width: size?.w ?? LOGO_MAX_W, height: size?.h ?? LOGO_MAX_H }}
+    />
+  );
+}
+
 /**
  * หนังสืออนุมัติใบเสนอราคา — the A4 letter. The same component is used for the
  * draft preview (watermarked) and for the final PDF.
@@ -48,26 +69,30 @@ export const CoverLetter = forwardRef<HTMLElement, { r: RequestRow; steps: Reque
   return (
     <article className="letter" ref={ref} aria-label="หนังสืออนุมัติใบเสนอราคา">
       {draft && <span className="wm" aria-hidden="true">ร่าง · DRAFT</span>}
-      {/* letterhead: company name far left · logo centred (large) · reference & date right */}
-      <header style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: 16, borderBottom: '2px solid #111', paddingBottom: 14 }}>
-        <div style={{ lineHeight: 1.45, textAlign: 'left', minWidth: 0 }}>
-          <FitLine size={14} weight={700}>{co?.th}</FitLine>
-          <FitLine size={11.5} weight={600}>{co?.en}</FitLine>
-          <FitLine size={10} color="#444">{co?.address}</FitLine>
-        </div>
+      {/* letterhead, like the company's printed letterhead:
+          row 1 — logo centred at the top, up to 70 mm wide (1/3 of A4) or 29 mm high
+          row 2 — company name far left · reference & date right */}
+      <header style={{ display: 'flex', flexDirection: 'column', gap: 12, borderBottom: '2px solid #111', paddingBottom: 12, marginTop: -26 }}>
         <div style={{ display: 'flex', justifyContent: 'center' }}>
           {logo ? (
-            <img className="letter-logo" src={logo} alt="" crossOrigin="anonymous" />
+            <LetterLogo src={logo} />
           ) : (
             <div style={{ width: 110, height: 110, borderRadius: 16, background: 'var(--brown)', color: '#fff', fontFamily: 'var(--f-ui)', fontWeight: 700, fontSize: 36, display: 'grid', placeItems: 'center' }}>
               {co?.initials || 'CO'}
             </div>
           )}
         </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto', alignItems: 'end', gap: 16 }}>
+        <div style={{ lineHeight: 1.45, textAlign: 'left', minWidth: 0 }}>
+          <FitLine size={14} weight={700}>{co?.th}</FitLine>
+          <FitLine size={11.5} weight={600}>{co?.en}</FitLine>
+          <FitLine size={10} color="#444">{co?.address}</FitLine>
+        </div>
         <div style={{ textAlign: 'right', fontSize: 13, lineHeight: 1.5 }}>
           เลขที่ · Ref: <b>{r.no ? `${r.no}/AP` : '(ยังไม่ออกเลข)'}</b><br />
           วันที่ {draft ? '[เมื่ออนุมัติครบ]' : thDate(r.completed_at || r.letter_at)}<br />
           Date: {draft ? '[on final approval]' : enDate(r.completed_at || r.letter_at)}
+        </div>
         </div>
       </header>
 
