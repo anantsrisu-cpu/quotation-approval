@@ -141,7 +141,7 @@ table.t tr.click{cursor:pointer} table.t tr.click:hover td{background:var(--soft
 
 /* letter */
 .letter-wrap{overflow-x:auto;background:#E6DED6;border-radius:12px;padding:24px 12px}
-.letter{position:relative;margin:0 auto;width:794px;min-height:1123px;background:#fff;color:#111;font-family:var(--f-doc);font-size:15px;line-height:1.55;padding:60px 70px 44px;display:flex;flex-direction:column;gap:13px;overflow:hidden}
+.letter{position:relative;margin:0 auto;width:794px;min-height:1123px;background:#fff;color:#111;font-family:var(--f-doc);font-size:15px;line-height:1.5;padding:60px 70px 36px;display:flex;flex-direction:column;gap:10px;overflow:hidden}
 .letter .wm{position:absolute;top:40%;left:50%;transform:translate(-50%,-50%) rotate(-24deg);font-size:110px;font-weight:700;color:rgba(172,137,121,.16);white-space:nowrap;pointer-events:none}
 .letter table{width:100%;border-collapse:collapse}
 .letter td,.letter th{border:1px solid var(--taupe);padding:5px 9px}

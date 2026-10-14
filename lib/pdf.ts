@@ -10,6 +10,12 @@ export async function elementToPdf(el: HTMLElement): Promise<Blob> {
   const H = 297;
   const h = (canvas.height * W) / canvas.width;
   const img = canvas.toDataURL('image/jpeg', 0.92);
+  // A letter that is only slightly taller than A4 is shrunk onto one page instead of spilling a few lines
+  if (h > H && h <= H * 1.12) {
+    const w = (W * H) / h;
+    pdf.addImage(img, 'JPEG', (W - w) / 2, 0, w, H);
+    return pdf.output('blob');
+  }
   pdf.addImage(img, 'JPEG', 0, 0, W, h);
   let left = h - H;
   let y = 0;
