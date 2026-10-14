@@ -1,8 +1,32 @@
 'use client';
-import { forwardRef } from 'react';
+import { forwardRef, useLayoutEffect, useRef } from 'react';
 import { useApp } from './AppProvider';
 import { PURP, SUBJ, bahtText, dOnly, enDate, fmt, fmtQty, thDate, verifyCode } from '@/lib/format';
 import type { RequestRow, RequestStep } from '@/lib/types';
+
+/** One line of text that never wraps: shrinks its font (down to 7px) until it fits the column. */
+function FitLine({ children, size, weight = 400, color }: { children: React.ReactNode; size: number; weight?: number; color?: string }) {
+  const el = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const d = el.current;
+    if (!d) return;
+    const fit = () => {
+      let s = size;
+      d.style.fontSize = s + 'px';
+      while (d.scrollWidth > d.clientWidth + 0.5 && s > 7) {
+        s = Math.max(7, s - 0.25);
+        d.style.fontSize = s + 'px';
+      }
+    };
+    fit();
+    document.fonts?.ready.then(fit); // re-measure once the Thai web font has loaded
+  }, [children, size]);
+  return (
+    <div ref={el} style={{ fontSize: size, fontWeight: weight, color, whiteSpace: 'nowrap', overflow: 'hidden' }}>
+      {children}
+    </div>
+  );
+}
 
 /**
  * หนังสืออนุมัติใบเสนอราคา — the A4 letter. The same component is used for the
@@ -26,10 +50,10 @@ export const CoverLetter = forwardRef<HTMLElement, { r: RequestRow; steps: Reque
       {draft && <span className="wm" aria-hidden="true">ร่าง · DRAFT</span>}
       {/* letterhead: company name far left · logo centred (large) · reference & date right */}
       <header style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: 16, borderBottom: '2px solid #111', paddingBottom: 14 }}>
-        <div style={{ lineHeight: 1.35, textAlign: 'left', minWidth: 0 }}>
-          <div style={{ fontSize: 17, fontWeight: 700 }}>{co?.th}</div>
-          <div style={{ fontSize: 13, fontWeight: 600 }}>{co?.en}</div>
-          <div style={{ fontSize: 11.5, color: '#444' }}>{co?.address}</div>
+        <div style={{ lineHeight: 1.45, textAlign: 'left', minWidth: 0 }}>
+          <FitLine size={14} weight={700}>{co?.th}</FitLine>
+          <FitLine size={11.5} weight={600}>{co?.en}</FitLine>
+          <FitLine size={10} color="#444">{co?.address}</FitLine>
         </div>
         <div style={{ display: 'flex', justifyContent: 'center' }}>
           {logo ? (
