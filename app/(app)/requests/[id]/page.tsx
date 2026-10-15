@@ -7,7 +7,7 @@ import { CoverLetter } from '@/components/CoverLetter';
 import { SignaturePad, type PadHandle } from '@/components/SignaturePad';
 import { Chain, Chip, Loading, Modal } from '@/components/ui';
 import { PURP, SUBJ, dt, fileSize, fmt } from '@/lib/format';
-import { itemsOf } from '@/lib/calc';
+import { daysText, itemsOf } from '@/lib/calc';
 import { CompareTable, ItemsTable } from '@/components/ItemTables';
 import { downloadUrl, elementToPdf } from '@/lib/pdf';
 import { reportError } from '@/lib/errors';
@@ -236,6 +236,7 @@ export default function RequestDetail() {
                 ['ฝ่ายที่ขอซื้อ · Department', deptTh(r.dept)],
                 ['ซื้อเพื่อ · Purpose', PURP[r.purpose]],
                 ['ผู้ขาย · Vendor', r.vendor],
+                ['เครดิต / Lead time', `${daysText(r.credit_days)} / ${daysText(r.lead_days)}`],
                 ['เลขที่ใบเสนอราคา · Quote no.', r.quote_no || '—'],
                 ['ผู้ซื้อ · Buyer', name(r.buyer_id)],
                 ['บริษัทผู้ซื้อ · Buyer company', co?.th || '—'],

@@ -42,6 +42,10 @@ export interface LineItem {
   qty: number;
   unit: string;
   unit_price: number;
+  /** discount as typed: "5%", "100" (baht per unit) or "10%+5%" */
+  discount?: string;
+  /** unit price after discount (filled by the server on submit) */
+  net_price?: number;
   prev_price: number | null;
   line_total?: number;
   prev_diff_pct?: number | null;
@@ -51,6 +55,12 @@ export interface Comparison {
   vendor: string;
   /** unit price per line item (same order as items) */
   prices?: number[];
+  /** discount per item (same order as items) */
+  discounts?: string[];
+  /** unit price after discount per item, filled by the server on submit */
+  nets?: number[];
+  credit_days?: number | null;
+  lead_days?: number | null;
   /** line totals per item, filled by the server on submit */
   lines?: number[];
   /** older single-item requests */
@@ -95,6 +105,8 @@ export interface RequestRow {
   buyer_id: string | null;
   company_id: string | null;
   vendor: string;
+  credit_days?: number | null;
+  lead_days?: number | null;
   quote_no: string;
   quote_date: string | null;
   details: string;

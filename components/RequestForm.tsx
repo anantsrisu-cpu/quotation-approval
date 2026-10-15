@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useApp } from './AppProvider';
 import { CoverLetter } from './CoverLetter';
 import { Loading, Modal, PageHead } from './ui';
-import { blankItem, calcItems, compPrices, itemsOf, type DraftComp, type DraftItem } from '@/lib/calc';
+import { blankComp, blankItem, calcItems, compDiscounts, compPrices, itemsOf, parseDays, type DraftComp, type DraftItem } from '@/lib/calc';
 import { PURP, SUBJ, SUBJ_EN, UNITS, fileSize, fmt, num } from '@/lib/format';
 import type { ApproverPreview, LineItem, Product, RequestFile, RequestRow, RequestStep } from '@/lib/types';
 
@@ -20,6 +20,8 @@ interface Draft {
   buyer_id: string;
   company_id: string;
   vendor: string;
+  credit_days: string;
+  lead_days: string;
   quote_no: string;
   quote_date: string;
   details: string;
@@ -33,6 +35,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 const MAX_ITEMS = 200;
 const skuKey = (s: string) => s.trim().toUpperCase();
 const money = (v: number | null | undefined) => (v ? fmt(v) : '');
+const normDisc = (v: string) => v.replace(/[\s,]/g, '');
 
 /** Split text copied from Excel into rows of cells (tab separated; a cell with line breaks comes in "quotes"). */
 function parseTsv(text: string): string[][] {
@@ -62,11 +65,11 @@ function parseTsv(text: string): string[][] {
   return rows.map((r) => r.map((x) => x.trim()));
 }
 
-/** Rows copied from Excel: SKU · qty · unit price · previous price · description. */
+/** Rows copied from Excel: SKU · qty · unit price · discount · previous price · description. */
 function parsePasted(text: string): DraftItem[] {
   return parseTsv(text)
     .filter((c) => c[0] && !/^(sku|รหัส)/i.test(c[0]))
-    .map((c) => ({ ...blankItem(), sku: skuKey(c[0]), qty: c[1] || '1', unit_price: c[2] || '', prev_price: c[3] || '', description: c.slice(4).filter(Boolean).join(' ') }));
+    .map((c) => ({ ...blankItem(), sku: skuKey(c[0]), qty: c[1] || '1', unit_price: c[2] || '', discount: c[3] || '', prev_price: c[4] || '', description: c.slice(5).filter(Boolean).join(' ') }));
 }
 
 export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string | null; copyFrom?: string | null; forUser?: string | null }) {
@@ -82,7 +85,8 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
       subject_type: 'general', items: [blankItem()],
       dept: (forUser && people[forUser]?.dept) || me?.dept || departments[0]?.id || '', purpose: 'replace', buyer_id: '',
       company_id: companies.find((c) => c.active)?.id || '', vendor: '', quote_no: '', quote_date: today(),
-      details: '', comps: [{ vendor: '', prices: [''] }, { vendor: '', prices: [''] }],
+      credit_days: '', lead_days: '',
+      details: '', comps: [blankComp(1), blankComp(1)],
       no_comp: false, no_comp_reason: '', low_reason: '',
     }),
     [me?.id, me?.dept, departments, companies, has, forUser, people],
@@ -121,11 +125,12 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
       }
       const its = itemsOf(r);
       const items: DraftItem[] = its.length
-        ? its.map((it) => ({ sku: it.sku, description: it.description || '', qty: String(it.qty || 1), unit: it.unit || 'ชิ้น', unit_price: money(it.unit_price), prev_price: it.prev_price != null ? fmt(it.prev_price) : '' }))
+        ? its.map((it) => ({ sku: it.sku, description: it.description || '', qty: String(it.qty || 1), unit: it.unit || 'ชิ้น', unit_price: money(it.unit_price), discount: it.discount || '', prev_price: it.prev_price != null ? fmt(it.prev_price) : '' }))
         : [blankItem()];
       const comps: DraftComp[] = (r.comparisons || []).map((c) => {
         const ps = compPrices(c);
-        return { vendor: c.vendor, prices: items.map((_, k) => money(ps[k])) };
+        const ds = compDiscounts(c, items.length);
+        return { vendor: c.vendor, prices: items.map((_, k) => money(ps[k])), discounts: ds, credit_days: c.credit_days != null ? String(c.credit_days) : '', lead_days: c.lead_days != null ? String(c.lead_days) : '' };
       });
       const keepPreparer = draftId || r.preparer_id === me?.id || isAdmin;
       setD({
@@ -134,7 +139,8 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
         buyer_id: r.buyer_id || '', company_id: r.company_id || '', vendor: r.vendor,
         quote_no: copyFrom ? '' : r.quote_no, quote_date: copyFrom ? today() : r.quote_date || today(),
         details: r.details,
-        comps: comps.length ? comps : [{ vendor: '', prices: items.map(() => '') }],
+        comps: comps.length ? comps : [blankComp(items.length)],
+        credit_days: r.credit_days != null ? String(r.credit_days) : '', lead_days: r.lead_days != null ? String(r.lead_days) : '',
         no_comp: r.no_comp, no_comp_reason: r.no_comp_reason, low_reason: r.low_reason,
       });
       if (draftId) {
@@ -159,13 +165,19 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
       return {
         ...x,
         items: [...x.items.slice(0, pos), ...add, ...x.items.slice(pos)],
-        comps: x.comps.map((c) => ({ ...c, prices: [...c.prices.slice(0, pos), ...add.map(() => ''), ...c.prices.slice(pos)] })),
+        comps: x.comps.map((c) => ({
+          ...c,
+          prices: [...c.prices.slice(0, pos), ...add.map(() => ''), ...c.prices.slice(pos)],
+          discounts: [...c.discounts.slice(0, pos), ...add.map(() => ''), ...c.discounts.slice(pos)],
+        })),
       };
     });
   const removeItem = (i: number) =>
-    setD((x) => (x && x.items.length > 1 ? { ...x, items: x.items.filter((_, j) => j !== i), comps: x.comps.map((c) => ({ ...c, prices: c.prices.filter((_, j) => j !== i) })) } : x));
-  const setPrice = (ci: number, k: number, v: string) =>
-    setD((x) => (x ? { ...x, comps: x.comps.map((c, j) => (j === ci ? { ...c, prices: c.prices.map((p, m) => (m === k ? v : p)) } : c)) } : x));
+    setD((x) => (x && x.items.length > 1 ? { ...x, items: x.items.filter((_, j) => j !== i), comps: x.comps.map((c) => ({ ...c, prices: c.prices.filter((_, j) => j !== i), discounts: c.discounts.filter((_, j) => j !== i) })) } : x));
+  const setPrice = (ci: number, k: number, v: string, field: 'prices' | 'discounts' = 'prices') =>
+    setD((x) => (x ? { ...x, comps: x.comps.map((c, j) => (j === ci ? { ...c, [field]: c[field].map((p, m) => (m === k ? v : p)) } : c)) } : x));
+  const setComp = (ci: number, patch: Partial<DraftComp>) =>
+    setD((x) => (x ? { ...x, comps: x.comps.map((c, j) => (j === ci ? { ...c, ...patch } : c)) } : x));
 
   // look up every SKU on the form (one query for all unknown codes)
   const skuList = (d?.items || []).map((it) => skuKey(it.sku)).filter(Boolean).join('|');
@@ -235,9 +247,12 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
     else if (prodOf(it) === null) missing.push(`${L}: ไม่พบ SKU ${skuKey(it.sku)} · SKU not found`);
     if (!(c.lines[i]?.q > 0)) missing.push(`${L}: กรอกจำนวน · Enter the quantity`);
     if (!(c.lines[i]?.up > 0)) missing.push(`${L}: กรอกราคาต่อหน่วย · Enter the unit price`);
+    if (c.lines[i]?.discErr) missing.push(`${L}: ${c.lines[i].discErr} · Check the discount`);
   });
   if (!d.dept) missing.push('เลือกฝ่ายที่ขอซื้อ · Choose the department');
   if (!d.vendor.trim()) missing.push('กรอกชื่อผู้ขาย · Enter the vendor');
+  if (parseDays(d.credit_days).error) missing.push('เครดิต: ใส่จำนวนวันเป็นตัวเลข · Credit must be whole days');
+  if (parseDays(d.lead_days).error) missing.push('Lead time: ใส่จำนวนวันเป็นตัวเลข · Lead time must be whole days');
   if (!d.buyer_id) missing.push('เลือกผู้ซื้อ · Choose the buyer');
   if (!d.company_id) missing.push('เลือกบริษัทผู้ซื้อ · Choose the buyer company');
   if (d.no_comp) {
@@ -246,7 +261,8 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
     if (!d.comps.length) missing.push('เพิ่มคู่เทียบอย่างน้อย 1 ราย หรือติ๊ก "ไม่มีคู่เทียบ" · Add a comparison or tick "No comparison"');
     d.comps.forEach((x, i) => {
       if (!x.vendor.trim()) missing.push(`คู่เทียบ ${i + 1}: กรอกชื่อผู้ขาย · Enter the vendor name`);
-      if (!c.comps[i]?.complete) missing.push(`คู่เทียบ ${i + 1}: กรอกราคาต่อหน่วยให้ครบทุกรายการ · Enter a price for every item`);
+      if (!c.comps[i]?.complete) missing.push(`คู่เทียบ ${i + 1}: กรอกราคาต่อหน่วยให้ครบทุกรายการ และตรวจส่วนลด · Enter a price for every item and check discounts`);
+      if (parseDays(x.credit_days).error || parseDays(x.lead_days).error) missing.push(`คู่เทียบ ${i + 1}: เครดิต / Lead time ต้องเป็นจำนวนวัน · Whole days only`);
     });
     if (!c.lowest && !d.low_reason.trim()) missing.push('ระบุเหตุผลที่ไม่เลือกราคาต่ำสุด · Explain why not the lowest price');
   }
@@ -258,7 +274,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
   const rowItems = (): LineItem[] =>
     d.items.map((it, i) => ({
       sku: skuKey(it.sku), product_name: nameOf(it), description: it.description.trim(),
-      qty: c.lines[i].q, unit: it.unit, unit_price: c.lines[i].up, prev_price: c.lines[i].prev,
+      qty: c.lines[i].q, unit: it.unit, unit_price: c.lines[i].up, discount: it.discount.replace(/[\s,]/g, ''), prev_price: c.lines[i].prev,
     }));
   const row = () => {
     const items = rowItems();
@@ -271,8 +287,10 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
       product_name: nameOf(d.items[0]) ? summaryName : '',
       qty: n === 1 ? items[0].qty : n,
       unit: n === 1 ? items[0].unit : 'รายการ',
-      unit_price: n === 1 ? items[0].unit_price : 0,
+      unit_price: n === 1 ? c.lines[0].net : 0,
       dept: d.dept || null,
+      credit_days: parseDays(d.credit_days).days,
+      lead_days: parseDays(d.lead_days).days,
       purpose: d.purpose,
       buyer_id: d.buyer_id || null,
       company_id: d.company_id || null,
@@ -280,7 +298,10 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
       quote_no: d.quote_no.trim(),
       quote_date: d.quote_date || null,
       details: d.details,
-      comparisons: d.no_comp ? [] : d.comps.map((x) => ({ vendor: x.vendor.trim(), prices: x.prices.map((p) => num(p)) })),
+      comparisons: d.no_comp ? [] : d.comps.map((x) => ({
+        vendor: x.vendor.trim(), prices: x.prices.map((p) => num(p)), discounts: x.discounts.map((v) => v.replace(/[\s,]/g, '')),
+        credit_days: parseDays(x.credit_days).days, lead_days: parseDays(x.lead_days).days,
+      })),
       no_comp: d.no_comp,
       no_comp_reason: d.no_comp ? d.no_comp_reason : '',
       low_reason: d.low_reason,
@@ -375,12 +396,17 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
 
   const previewRow: RequestRow = {
     id: id || 'draft', no, status: 'draft', preparer_id: d.preparer_id || me.id, created_by: me.id, subject_type: d.subject_type,
-    items: rowItems().map((it, i) => ({ ...it, product_name: it.product_name || '[ชื่อสินค้า]', line_total: c.lines[i].line, prev_diff_pct: c.lines[i].pct })),
+    items: rowItems().map((it, i) => ({ ...it, product_name: it.product_name || '[ชื่อสินค้า]', net_price: c.lines[i].net, line_total: c.lines[i].line, prev_diff_pct: c.lines[i].pct })),
+    credit_days: parseDays(d.credit_days).days, lead_days: parseDays(d.lead_days).days,
     sku: skuKey(d.items[0].sku), product_name: summaryName, qty: n === 1 ? c.lines[0].q : n, unit: n === 1 ? d.items[0].unit : 'รายการ',
-    unit_price: n === 1 ? c.lines[0].up : 0, subtotal: c.sub, vat: c.vat, total: c.total, vat_rate: vatRate, dept: d.dept, purpose: d.purpose,
+    unit_price: n === 1 ? c.lines[0].net : 0, subtotal: c.sub, vat: c.vat, total: c.total, vat_rate: vatRate, dept: d.dept, purpose: d.purpose,
     buyer_id: d.buyer_id, company_id: d.company_id, vendor: d.vendor || '[ผู้ขาย]', quote_no: d.quote_no,
     quote_date: d.quote_date, details: d.details,
-    comparisons: d.no_comp ? [] : c.comps.map((x) => ({ vendor: x.vendor, prices: x.lines.map((l) => l.up), lines: x.lines.map((l) => l.line), subtotal: x.sub, total: x.total, diff: x.diff })),
+    comparisons: d.no_comp ? [] : c.comps.map((x, ci) => ({
+      vendor: x.vendor, prices: x.lines.map((l) => l.up), discounts: d.comps[ci].discounts, nets: x.lines.map((l) => l.net),
+      lines: x.lines.map((l) => l.line), subtotal: x.sub, total: x.total, diff: x.diff,
+      credit_days: parseDays(d.comps[ci].credit_days).days, lead_days: parseDays(d.comps[ci].lead_days).days,
+    })),
     no_comp: d.no_comp, no_comp_reason: d.no_comp_reason, low_reason: c.lowest ? '' : d.low_reason, message,
     tier_label: approvers[0]?.tier_label || '', current_step: 0, preparer_signature: null, created_at: new Date().toISOString(),
     submitted_at: null, step_since: null, completed_at: null, letter_path: null, letter_at: null,
@@ -439,6 +465,14 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
           <label className="f" htmlFor="f-vendor">ชื่อผู้ขายที่เลือก · Selected vendor <span className="req">*</span>
             <input className="in" id="f-vendor" value={d.vendor} onChange={(e) => set('vendor', e.target.value)} />
           </label>
+          <div className="grid" style={{ gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: 10 }}>
+            <label className="f" htmlFor="f-credit">เครดิต (วัน) · Credit
+              <input className="in r" inputMode="numeric" id="f-credit" value={d.credit_days} placeholder="เช่น 30" onChange={(e) => set('credit_days', e.target.value)} />
+            </label>
+            <label className="f" htmlFor="f-lead">Lead time (วัน)
+              <input className="in r" inputMode="numeric" id="f-lead" value={d.lead_days} placeholder="เช่น 7" onChange={(e) => set('lead_days', e.target.value)} />
+            </label>
+          </div>
           <label className="f" htmlFor="f-quote">เลขที่ใบเสนอราคาผู้ขาย · Vendor quote no.
             <input className="in" id="f-quote" value={d.quote_no} onChange={(e) => set('quote_no', e.target.value)} />
           </label>
@@ -493,17 +527,23 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
                         {Array.from(new Set([...UNITS, it.unit].filter(Boolean))).map((u) => <option key={u} value={u}>{u}</option>)}
                       </select>
                     </label>
-                    <label className="f" htmlFor={`up${i}`}>ราคา/หน่วย ก่อน VAT <span className="req">*</span>
+                    <label className="f" htmlFor={`up${i}`}>ราคา/หน่วย <span className="req">*</span>
                       <input className="in r" inputMode="decimal" id={`up${i}`} value={it.unit_price} placeholder="0.00"
                         onChange={(e) => setItem(i, { unit_price: e.target.value })} onBlur={() => L.up > 0 && setItem(i, { unit_price: fmt(L.up) })}
                         onPaste={(e) => pasteDown(e, (k, v) => setItem(k, { unit_price: v }), i)} />
                     </label>
-                    <label className="f" htmlFor={`pp${i}`}>ราคาก่อนหน้า · Previous
+                    <label className="f" htmlFor={`disc${i}`}>ส่วนลด
+                      <input className="in r" id={`disc${i}`} value={it.discount} placeholder="5% / 100" aria-invalid={!!L.discErr}
+                        style={L.discErr ? { borderColor: 'var(--bad)' } : undefined}
+                        onChange={(e) => setItem(i, { discount: e.target.value })}
+                        onPaste={(e) => pasteDown(e, (k, v) => setItem(k, { discount: v }), i)} />
+                    </label>
+                    <label className="f" htmlFor={`pp${i}`}>ราคาก่อนหน้า
                       <input className="in r" inputMode="decimal" id={`pp${i}`} value={it.prev_price} placeholder="ไม่บังคับ"
                         onChange={(e) => setItem(i, { prev_price: e.target.value })} onBlur={() => L.prev != null && L.prev > 0 && setItem(i, { prev_price: fmt(L.prev) })}
                         onPaste={(e) => pasteDown(e, (k, v) => setItem(k, { prev_price: v }), i)} />
                     </label>
-                    <div className="f">รวม ก่อน VAT<div className="ro">{fmt(L.line)}</div></div>
+                    <div className="f">รวม (ก่อน VAT)<div className="ro">{fmt(L.line)}</div></div>
                   </div>
                   <div className="item-info" aria-live="polite">
                     {!key ? <span className="note">กรอก SKU แล้วชื่อสินค้าจะขึ้นมาเอง · Enter a SKU</span>
@@ -517,9 +557,11 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
                           ))}
                         </span>
                       )}
+                    {L.discErr ? <span style={{ color: 'var(--bad)', fontWeight: 600 }}>ส่วนลด: {L.discErr}</span>
+                      : L.hasDisc && L.up > 0 && <span className="chip st-draft num">ราคาสุทธิ {fmt(L.net)} / {it.unit} (ลด {fmt(L.up - L.net)})</span>}
                     {L.pct != null && (
                       <span className={'chip ' + (L.pct > 0 ? 'st-bad' : 'st-ok')} title="เทียบราคาก่อนหน้า · vs previous price">
-                        {L.pct > 0 ? '▲' : L.pct < 0 ? '▼' : '='} {L.pct > 0 ? '+' : ''}{L.pct.toFixed(2)}% จากราคาก่อนหน้า
+                        {L.pct > 0 ? '▲' : L.pct < 0 ? '▼' : '='} {L.pct > 0 ? '+' : ''}{L.pct.toFixed(2)}% {L.hasDisc ? 'ราคาสุทธิ' : ''}จากราคาก่อนหน้า
                       </span>
                     )}
                   </div>
@@ -585,11 +627,11 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <div className="actions">
-              <span className="note">กรอกราคาต่อหน่วยก่อน VAT ของผู้ขายแต่ละรายทุกรายการ ระบบคูณจำนวนและรวมยอดให้ · Enter each vendor&apos;s unit price per item; totals are calculated</span>
+              <span className="note">กรอกราคาต่อหน่วยก่อน VAT และส่วนลด (ถ้ามี) ของผู้ขายแต่ละรายทุกรายการ ระบบคำนวณราคาสุทธิ × จำนวน และรวมยอดให้ · Enter each vendor&apos;s unit price and discount per item; net price × quantity is totalled</span>
               <span className="row" style={{ gap: 8, alignItems: 'center' }}>
                 <button type="button" className="icon-btn" onClick={() => set('comps', d.comps.slice(0, -1))} aria-label="ลดคู่เทียบ · Remove a vendor" disabled={!d.comps.length}>−</button>
                 <b className="num">{d.comps.length}</b>
-                <button type="button" className="icon-btn" style={{ background: 'var(--brown)', color: '#fff', borderColor: 'var(--brown)' }} onClick={() => set('comps', [...d.comps, { vendor: '', prices: d.items.map(() => '') }])} aria-label="เพิ่มคู่เทียบ · Add a vendor">+</button>
+                <button type="button" className="icon-btn" style={{ background: 'var(--brown)', color: '#fff', borderColor: 'var(--brown)' }} onClick={() => set('comps', [...d.comps, blankComp(d.items.length)])} aria-label="เพิ่มคู่เทียบ · Add a vendor">+</button>
               </span>
             </div>
             <div className="tw">
@@ -617,14 +659,24 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
                       <td className="note">{k + 1}</td>
                       <td><span className="mono" style={{ fontSize: 12 }}>{skuKey(it.sku) || '—'}</span><br />{nameOf(it) || <span className="note">—</span>}</td>
                       <td className="num" style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>{it.qty} {it.unit}</td>
-                      <td className="num sel" style={{ textAlign: 'right' }}>{fmt(c.lines[k].up)}<div className="note">= {fmt(c.lines[k].line)}</div></td>
+                      <td className="num sel" style={{ textAlign: 'right' }}>
+                        {fmt(c.lines[k].up)}
+                        {c.lines[k].hasDisc && <div className="note">ลด {normDisc(it.discount)} → {fmt(c.lines[k].net)}</div>}
+                        <div className="note">= {fmt(c.lines[k].line)}</div>
+                      </td>
                       {d.comps.map((x, ci) => (
                         <td key={ci}>
                           <input className="in r" inputMode="decimal" id={`cp${ci}-${k}`} aria-label={`ราคาต่อหน่วย ${x.vendor || `คู่เทียบ ${ci + 1}`} รายการที่ ${k + 1}`} value={x.prices[k] ?? ''} placeholder="0.00"
                             onChange={(e) => setPrice(ci, k, e.target.value)}
                             onBlur={() => { const v = num(x.prices[k]); if (v > 0) setPrice(ci, k, fmt(v)); }}
                             onPaste={(e) => pasteDown(e, (m, v) => setPrice(ci, m, v), k)} />
-                          <div className="note num" style={{ textAlign: 'right' }}>= {fmt(c.comps[ci]?.lines[k]?.line)}</div>
+                          <input className="in r disc" id={`cd${ci}-${k}`} aria-label={`ส่วนลด ${x.vendor || `คู่เทียบ ${ci + 1}`} รายการที่ ${k + 1}`} value={x.discounts[k] ?? ''} placeholder="ส่วนลด 5% / 100"
+                            aria-invalid={!!c.comps[ci]?.lines[k]?.discErr} style={c.comps[ci]?.lines[k]?.discErr ? { borderColor: 'var(--bad)' } : undefined}
+                            onChange={(e) => setPrice(ci, k, e.target.value, 'discounts')}
+                            onPaste={(e) => pasteDown(e, (m, v) => setPrice(ci, m, v, 'discounts'), k)} />
+                          <div className="note num" style={{ textAlign: 'right', color: c.comps[ci]?.lines[k]?.discErr ? 'var(--bad)' : undefined }}>
+                            {c.comps[ci]?.lines[k]?.discErr || <>{c.comps[ci]?.lines[k]?.hasDisc && <>สุทธิ {fmt(c.comps[ci]?.lines[k]?.net)} · </>}= {fmt(c.comps[ci]?.lines[k]?.line)}</>}
+                          </div>
                         </td>
                       ))}
                     </tr>
@@ -648,6 +700,22 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
                       <td key={ci} className="num" style={{ textAlign: 'right', fontWeight: 600, color: !x.complete ? 'var(--muted)' : x.diff >= 0 ? 'var(--sage-ink)' : 'var(--bad)' }}>
                         {!x.complete ? 'กรอกให้ครบ' : x.diff >= 0 ? `สูงกว่า +${fmt(x.diff)}` : `ต่ำกว่า −${fmt(-x.diff)}`}
                       </td>
+                    ))}
+                  </tr>
+                  <tr>
+                    <td colSpan={3}>เครดิต (วัน) · Credit</td>
+                    <td className="num sel" style={{ textAlign: 'right' }}>{d.credit_days.trim() ? `${d.credit_days.trim()} วัน` : '—'}</td>
+                    {d.comps.map((x, ci) => (
+                      <td key={ci}><input className="in r" inputMode="numeric" id={`cc${ci}`} aria-label={`เครดิต (วัน) ${x.vendor || `คู่เทียบ ${ci + 1}`}`} value={x.credit_days} placeholder="วัน"
+                        aria-invalid={!!parseDays(x.credit_days).error} onChange={(e) => setComp(ci, { credit_days: e.target.value })} /></td>
+                    ))}
+                  </tr>
+                  <tr>
+                    <td colSpan={3}>Lead time (วัน)</td>
+                    <td className="num sel" style={{ textAlign: 'right' }}>{d.lead_days.trim() ? `${d.lead_days.trim()} วัน` : '—'}</td>
+                    {d.comps.map((x, ci) => (
+                      <td key={ci}><input className="in r" inputMode="numeric" id={`cl${ci}`} aria-label={`Lead time (วัน) ${x.vendor || `คู่เทียบ ${ci + 1}`}`} value={x.lead_days} placeholder="วัน"
+                        aria-invalid={!!parseDays(x.lead_days).error} onChange={(e) => setComp(ci, { lead_days: e.target.value })} /></td>
                     ))}
                   </tr>
                 </tfoot>
@@ -747,8 +815,8 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
       {modal === 'paste' && (
         <Modal title="วางหลายรายการจาก Excel · Paste items from Excel" onClose={() => setModal(null)} wide>
           <p style={{ margin: 0 }}>คัดลอกแถวจาก Excel แล้ววางด้านล่าง 1 แถว = 1 รายการ เรียงคอลัมน์ดังนี้ · Copy rows from Excel, one row per item, columns in this order:</p>
-          <div className="box mono" style={{ fontSize: 13 }}>SKU ⇥ จำนวน ⇥ ราคาต่อหน่วยก่อน VAT ⇥ ราคาก่อนหน้า ⇥ คำต่อท้าย</div>
-          <textarea className="in mono" aria-label="ข้อมูลที่วาง · Pasted rows" style={{ minHeight: 180 }} value={pasteText} onChange={(e) => setPasteText(e.target.value)} placeholder={'AC-INV-18000\t6\t29050\t28500\tติดตั้งห้องประชุม'} />
+          <div className="box mono" style={{ fontSize: 13 }}>SKU ⇥ จำนวน ⇥ ราคาต่อหน่วยก่อน VAT ⇥ ส่วนลด (5% / 100 / ว่าง) ⇥ ราคาก่อนหน้า ⇥ คำต่อท้าย</div>
+          <textarea className="in mono" aria-label="ข้อมูลที่วาง · Pasted rows" style={{ minHeight: 180 }} value={pasteText} onChange={(e) => setPasteText(e.target.value)} placeholder={'AC-INV-18000\t6\t29050\t5%\t28500\tติดตั้งห้องประชุม'} />
           <span className="note">พบ {parsePasted(pasteText).length} รายการ · rows found{n + parsePasted(pasteText).length > MAX_ITEMS ? ` (เกิน ${MAX_ITEMS} รายการ จะเพิ่มเท่าที่ได้)` : ''}</span>
           <div className="row" style={{ gap: 10, justifyContent: 'flex-end' }}>
             <button className="btn" onClick={() => setModal(null)}>ยกเลิก · Cancel</button>
@@ -758,7 +826,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
               onClick={() => {
                 const rows = parsePasted(pasteText);
                 const onlyBlank = d.items.length === 1 && !d.items[0].sku.trim() && !d.items[0].unit_price.trim();
-                if (onlyBlank) setD((x) => (x ? { ...x, items: rows.slice(0, MAX_ITEMS), comps: x.comps.map((cp) => ({ ...cp, prices: rows.slice(0, MAX_ITEMS).map(() => '') })) } : x));
+                if (onlyBlank) setD((x) => (x ? { ...x, items: rows.slice(0, MAX_ITEMS), comps: x.comps.map((cp) => ({ ...cp, prices: rows.slice(0, MAX_ITEMS).map(() => ''), discounts: rows.slice(0, MAX_ITEMS).map(() => '') })) } : x));
                 else addItems(rows);
                 setModal(null);
               }}

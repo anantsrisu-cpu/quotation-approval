@@ -1,7 +1,7 @@
 'use client';
 import { forwardRef, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useApp } from './AppProvider';
-import { compPrices, itemsOf, prevPct } from '@/lib/calc';
+import { compDiscounts, compNets, compPrices, itemsOf, netOf, normDiscount, prevPct } from '@/lib/calc';
 import { PURP, SUBJ, bahtText, dOnly, enDate, fmt, fmtQty, thDate, verifyCode } from '@/lib/format';
 import type { RequestRow, RequestStep } from '@/lib/types';
 
@@ -55,6 +55,7 @@ const PAGE_H = 1123;
 const PAD_TOP = 34;
 const PAD_BOTTOM = 30;
 const GAP = 10;
+const GAP_COMPACT = 6; // tighter layout used when it keeps the letter on fewer pages
 const SAFETY = 6;
 
 /** A table that may continue on the next page: its header row repeats on every page. */
@@ -72,7 +73,7 @@ type PagePart = { kind: 'el'; key: string } | { kind: 'rows'; table: string; row
 
 function LTable({ t, rows }: { t: TableSpec; rows: { key: string; tr: React.ReactNode }[] }) {
   return (
-    <table className="lt" data-t={t.id} style={{ fontSize: t.fontSize }}>
+    <table className="lt" data-t={t.id} style={{ fontSize: `calc(${t.fontSize}px * var(--lt-scale, 1))` }}>
       <colgroup>{t.cols.map((w, i) => <col key={i} style={w ? { width: w } : undefined} />)}</colgroup>
       <thead>{t.head}</thead>
       <tbody>{rows.map((r) => r.tr)}</tbody>
@@ -136,19 +137,23 @@ export const CoverLetter = forwardRef<HTMLElement, { r: RequestRow; steps: Reque
 
   const itemTitle = n > 1 ? `${first?.product_name || ''} และอีก ${n - 1} รายการ` : first?.product_name || r.product_name;
 
-  // items table: # · item (SKU, name, long text) · qty · unit price · [previous · change] · amount
-  const itemCols: (number | null)[] = hasPrev ? [30, null, 64, 84, 84, 58, 92] : [30, null, 70, 96, 104];
+  // items table: # · item (SKU, name, long text) · qty · unit price · [discount · net] · [previous · change] · amount
+  const hasDisc = items.some((it) => normDiscount(it.discount));
+  const both = hasDisc && hasPrev;
+  const itemCols: (number | null)[] = [28, null, both ? 56 : 62, both ? 74 : 80, ...(hasDisc ? [both ? 50 : 56, both ? 74 : 80] : []), ...(hasPrev ? [both ? 72 : 76, both ? 52 : 56] : []), both ? 86 : 90];
   const span = itemCols.length - 1;
   const itemsTable: TableSpec = {
     id: 'items',
     cols: itemCols,
-    fontSize: 12,
+    fontSize: hasDisc && hasPrev ? 11.5 : 12,
     head: (
       <tr>
         <th style={C}>ที่</th>
         <th>รายการ · Description</th>
         <th style={R}>จำนวน</th>
         <th style={R}>ราคา/หน่วย<br />ก่อน VAT</th>
+        {hasDisc && <th style={R}>ส่วนลด</th>}
+        {hasDisc && <th style={R}>ราคาสุทธิ<br />/หน่วย</th>}
         {hasPrev && <th style={R}>ราคา<br />ก่อนหน้า</th>}
         {hasPrev && <th style={R}>+/− %</th>}
         <th style={R}>จำนวนเงิน<br />ก่อน VAT</th>
@@ -156,7 +161,8 @@ export const CoverLetter = forwardRef<HTMLElement, { r: RequestRow; steps: Reque
     ),
     rows: [
       ...items.map((it, i) => {
-        const pct = it.prev_diff_pct ?? prevPct(it.unit_price, it.prev_price);
+        const net = netOf(it);
+        const pct = it.prev_diff_pct ?? prevPct(net, it.prev_price);
         return {
           key: `i${i}`,
           tr: (
@@ -168,9 +174,11 @@ export const CoverLetter = forwardRef<HTMLElement, { r: RequestRow; steps: Reque
               </td>
               <td style={R}>{fmtQty(it.qty)} {it.unit}</td>
               <td style={R}>{fmt(it.unit_price)}</td>
+              {hasDisc && <td style={R}>{normDiscount(it.discount) || '—'}</td>}
+              {hasDisc && <td style={R}>{fmt(net)}</td>}
               {hasPrev && <td style={R}>{it.prev_price != null ? fmt(it.prev_price) : '—'}</td>}
               {hasPrev && <td style={R}>{pct == null ? '—' : `${pct > 0 ? '+' : ''}${pct.toFixed(2)}%`}</td>}
-              <td style={R}>{fmt(it.line_total ?? it.unit_price * it.qty)}</td>
+              <td style={R}>{fmt(it.line_total ?? net * it.qty)}</td>
             </tr>
           ),
         };
@@ -182,67 +190,49 @@ export const CoverLetter = forwardRef<HTMLElement, { r: RequestRow; steps: Reque
     ],
   };
 
-  // comparison: one item → one row per vendor; several items → unit price of every vendor per item
+  // comparison: net unit price of every vendor for every item (discount shown under it),
+  // then totals, difference, credit term and lead time
   let cmpTable: TableSpec | null = null;
   if (!r.no_comp && comps.length) {
-    if (n <= 1) {
-      cmpTable = {
-        id: 'cmp',
-        cols: [null, 96, 70, 104, 104, 96],
-        fontSize: 12,
-        head: (
-          <tr>
-            <th>ผู้ขาย · Vendor</th><th style={R}>ราคาต่อหน่วย ก่อน VAT</th><th style={R}>จำนวน</th>
-            <th style={R}>มูลค่ารวม ก่อน VAT</th><th style={R}>รวม VAT</th><th style={R}>ส่วนต่าง</th>
-          </tr>
-        ),
-        rows: [
-          { key: 'v0', tr: <tr key="v0" data-k="v0" style={{ fontWeight: 700 }}><td>{r.vendor} ✓</td><td style={R}>{fmt(first?.unit_price)}</td><td style={R}>{fmtQty(first?.qty)}</td><td style={R}>{fmt(r.subtotal)}</td><td style={R}>{fmt(r.total)}</td><td style={R}>ผู้ขายที่เลือก</td></tr> },
-          ...comps.map((x, i) => ({
-            key: `v${i + 1}`,
-            tr: (
-              <tr key={`v${i + 1}`} data-k={`v${i + 1}`}>
-                <td>{x.vendor}</td><td style={R}>{fmt(compPrices(x)[0])}</td><td style={R}>{fmtQty(first?.qty)}</td>
-                <td style={R}>{fmt(x.subtotal)}</td><td style={R}>{fmt(x.total)}</td>
-                <td style={R}>{(x.diff || 0) >= 0 ? '+' : '−'}{fmt(Math.abs(x.diff || 0))}</td>
-              </tr>
-            ),
-          })),
-        ],
-      };
-    } else {
-      const m = comps.length + 1;
-      const vw = Math.max(64, Math.min(104, Math.floor((654 - 30 - 56 - 170) / m)));
-      const fs = m > 4 ? 10.5 : 11.5;
-      const diffCell = (d: number | undefined) => (d == null ? '—' : `${d >= 0 ? '+' : '−'}${fmt(Math.abs(d))}`);
-      cmpTable = {
-        id: 'cmp',
-        cols: [30, null, 56, ...Array(m).fill(vw)],
-        fontSize: fs,
-        head: (
-          <tr>
-            <th style={C}>ที่</th><th>รายการ · Item</th><th style={R}>จำนวน</th>
-            <th style={R}>{r.vendor} ✓</th>
-            {comps.map((x, i) => <th key={i} style={R}>{x.vendor}</th>)}
-          </tr>
-        ),
-        rows: [
-          ...items.map((it, k) => ({
-            key: `c${k}`,
-            tr: (
-              <tr key={`c${k}`} data-k={`c${k}`}>
-                <td style={C}>{k + 1}</td><td style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.sku} {it.product_name}</td><td style={R}>{fmtQty(it.qty)}</td>
-                <td style={{ ...R, fontWeight: 700 }}>{fmt(it.unit_price)}</td>
-                {comps.map((x, i) => <td key={i} style={R}>{fmt(compPrices(x)[k])}</td>)}
-              </tr>
-            ),
-          })),
-          { key: 'cs', stick: true, tr: <tr key="cs" data-k="cs"><td colSpan={3} style={R}>รวม ก่อน VAT · Subtotal</td><td style={{ ...R, fontWeight: 700 }}>{fmt(r.subtotal)}</td>{comps.map((x, i) => <td key={i} style={R}>{fmt(x.subtotal)}</td>)}</tr> },
-          { key: 'ct', stick: true, tr: <tr key="ct" data-k="ct" style={{ fontWeight: 700 }}><td colSpan={3} style={R}>รวม VAT · Total</td><td style={R}>{fmt(r.total)}</td>{comps.map((x, i) => <td key={i} style={R}>{fmt(x.total)}</td>)}</tr> },
-          { key: 'cd', stick: true, tr: <tr key="cd" data-k="cd"><td colSpan={3} style={R}>ส่วนต่าง · Difference</td><td style={R}>ที่เลือก</td>{comps.map((x, i) => <td key={i} style={R}>{diffCell(x.diff)}</td>)}</tr> },
-        ],
-      };
-    }
+    const m = comps.length + 1;
+    const vw = Math.max(64, Math.min(112, Math.floor((654 - 28 - 50 - 150) / m)));
+    const fs = m > 4 ? 10.5 : 11.5;
+    const diffCell = (d: number | undefined) => (d == null ? '—' : `${d >= 0 ? '+' : '−'}${fmt(Math.abs(d))}`);
+    const priceCell = (price: number, disc: string, net: number, bold = false) => (
+      <>
+        <span style={bold ? { fontWeight: 700 } : undefined}>{fmt(net)}</span>
+        {disc && <div style={{ fontSize: '0.85em', color: '#555' }}>({fmt(price)} ลด {disc})</div>}
+      </>
+    );
+    const dd = (credit: number | null | undefined, lead: number | null | undefined) => `${credit ?? '—'} / ${lead ?? '—'}`;
+    cmpTable = {
+      id: 'cmp',
+      cols: [28, null, 50, ...Array(m).fill(vw)],
+      fontSize: fs,
+      head: (
+        <tr>
+          <th style={C}>ที่</th><th>รายการ · Item</th><th style={R}>จำนวน</th>
+          <th style={R}>{r.vendor} ✓</th>
+          {comps.map((x, i) => <th key={i} style={R}>{x.vendor}</th>)}
+        </tr>
+      ),
+      rows: [
+        ...items.map((it, k) => ({
+          key: `c${k}`,
+          tr: (
+            <tr key={`c${k}`} data-k={`c${k}`}>
+              <td style={C}>{k + 1}</td><td style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.sku} {it.product_name}</td><td style={R}>{fmtQty(it.qty)}</td>
+              <td style={R}>{priceCell(it.unit_price, normDiscount(it.discount), netOf(it), true)}</td>
+              {comps.map((x, i) => <td key={i} style={R}>{priceCell(compPrices(x)[k] || 0, compDiscounts(x, n)[k], compNets(x, n)[k])}</td>)}
+            </tr>
+          ),
+        })),
+        { key: 'cs', stick: true, tr: <tr key="cs" data-k="cs"><td colSpan={3} style={R}>รวม ก่อน VAT · Subtotal</td><td style={{ ...R, fontWeight: 700 }}>{fmt(r.subtotal)}</td>{comps.map((x, i) => <td key={i} style={R}>{fmt(x.subtotal)}</td>)}</tr> },
+        { key: 'ct', stick: true, tr: <tr key="ct" data-k="ct" style={{ fontWeight: 700 }}><td colSpan={3} style={R}>รวม VAT · Total</td><td style={R}>{fmt(r.total)}</td>{comps.map((x, i) => <td key={i} style={R}>{fmt(x.total)}</td>)}</tr> },
+        { key: 'cd', stick: true, tr: <tr key="cd" data-k="cd"><td colSpan={3} style={R}>ส่วนต่าง · Difference</td><td style={R}>ที่เลือก</td>{comps.map((x, i) => <td key={i} style={R}>{diffCell(x.diff)}</td>)}</tr> },
+        { key: 'cc', stick: true, tr: <tr key="cc" data-k="cc"><td colSpan={3} style={R}>เครดิต / Lead time (วัน)</td><td style={R}>{dd(r.credit_days, r.lead_days)}</td>{comps.map((x, i) => <td key={i} style={R}>{dd(x.credit_days, x.lead_days)}</td>)}</tr> },
+      ],
+    };
   }
 
   const blocks: Block[] = [
@@ -278,7 +268,7 @@ export const CoverLetter = forwardRef<HTMLElement, { r: RequestRow; steps: Reque
       ),
     },
     { kind: 'table', key: 'items', table: itemsTable },
-    { kind: 'el', key: 'cmpTitle', keepWithNext: true, node: <div style={{ fontWeight: 700 }}>การเปรียบเทียบราคา · Price comparison{n > 1 && cmpTable ? ' (ราคาต่อหน่วย ก่อน VAT · unit prices before VAT)' : ''}</div> },
+    { kind: 'el', key: 'cmpTitle', keepWithNext: true, node: <div style={{ fontWeight: 700 }}>การเปรียบเทียบราคา · Price comparison{cmpTable ? ' (ราคาต่อหน่วยสุทธิ ก่อน VAT · net unit prices before VAT)' : ''}</div> },
     ...(r.no_comp
       ? [{ kind: 'el', key: 'nocomp', node: <div>ไม่มีคู่เทียบ · No comparison — เหตุผล: {r.no_comp_reason}</div> } as Block]
       : cmpTable
@@ -333,11 +323,11 @@ export const CoverLetter = forwardRef<HTMLElement, { r: RequestRow; steps: Reque
 
   // ---------- measure every block off-screen, then fill A4 pages ----------
   const measRef = useRef<HTMLDivElement>(null);
-  const [pages, setPages] = useState<PagePart[][] | null>(null);
+  const measCompactRef = useRef<HTMLDivElement>(null);
+  const [layout, setLayout] = useState<{ compact: boolean; pages: PagePart[][] } | null>(null);
 
-  const paginate = () => {
-    const box = measRef.current;
-    if (!box) return;
+  /** Fill pages using the block heights measured in one off-screen copy. */
+  const layoutWith = (box: HTMLDivElement, GAP: number): PagePart[][] => {
     const h = (sel: string) => (box.querySelector(sel) as HTMLElement | null)?.getBoundingClientRect().height || 0;
     const footH = h('[data-m="footer"]');
     const contH = h('[data-m="cont"]');
@@ -406,7 +396,21 @@ export const CoverLetter = forwardRef<HTMLElement, { r: RequestRow; steps: Reque
       if (page.length && used + chunkCost(chunk, page, used) > capFor(out.length - 1)) newPage();
       chunk.forEach(place);
     });
-    setPages((prev) => (JSON.stringify(prev) === JSON.stringify(out) ? prev : out));
+    return out;
+  };
+
+  // normal spacing first; if that spills onto another page, try the compact spacing
+  const paginate = () => {
+    const box = measRef.current;
+    const boxC = measCompactRef.current;
+    if (!box || !boxC) return;
+    const normal = layoutWith(box, GAP);
+    let next = { compact: false, pages: normal };
+    if (normal.length > 1) {
+      const compact = layoutWith(boxC, GAP_COMPACT);
+      if (compact.length < normal.length) next = { compact: true, pages: compact };
+    }
+    setLayout((prev) => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
   };
   const paginateRef = useRef(paginate);
   paginateRef.current = paginate;
@@ -421,6 +425,7 @@ export const CoverLetter = forwardRef<HTMLElement, { r: RequestRow; steps: Reque
     if (!box || typeof ResizeObserver === 'undefined') return;
     const ro = new ResizeObserver(() => paginateRef.current());
     ro.observe(box);
+    if (measCompactRef.current) ro.observe(measCompactRef.current);
     document.fonts?.ready.then(() => paginateRef.current());
     return () => ro.disconnect();
   }, []);
@@ -432,13 +437,14 @@ export const CoverLetter = forwardRef<HTMLElement, { r: RequestRow; steps: Reque
     return <div key={`${part.table}-${i}`}><LTable t={t} rows={rows} /></div>;
   };
 
+  const pages = layout?.pages;
   const shown = pages || [blocks.map((b): PagePart => (b.kind === 'el' ? { kind: 'el', key: b.key } : { kind: 'rows', table: b.table.id, rows: b.table.rows.map((x) => x.key) }))];
 
   return (
     <>
       <section className="letter-pages" ref={ref} data-ready={pages ? '1' : '0'} aria-label="หนังสืออนุมัติใบเสนอราคา">
         {shown.map((parts, p) => (
-          <article className="letter" key={p} aria-label={`หน้า ${p + 1} · Page ${p + 1}`}>
+          <article className={layout?.compact ? 'letter compact' : 'letter'} key={p} aria-label={`หน้า ${p + 1} · Page ${p + 1}`}>
             {draft && <span className="wm" aria-hidden="true">ร่าง · DRAFT</span>}
             {p > 0 && contHead}
             {parts.map(renderPart)}
@@ -448,17 +454,19 @@ export const CoverLetter = forwardRef<HTMLElement, { r: RequestRow; steps: Reque
       </section>
       {/* off-screen copy used only to measure block heights */}
       <div className="letter-measure" aria-hidden="true">
-        <div className="letter" ref={measRef}>
-          <div data-m="cont">{contHead}</div>
-          {blocks.map((b) =>
-            b.kind === 'el' ? (
-              <div key={b.key} data-m={`el-${b.key}`}>{b.node}</div>
-            ) : (
-              <div key={b.key}><LTable t={b.table} rows={b.table.rows} /></div>
-            ),
-          )}
-          <div data-m="footer">{footer(1, 1)}</div>
-        </div>
+        {[measRef, measCompactRef].map((mref, i) => (
+          <div className={i ? 'letter compact' : 'letter'} ref={mref} key={i}>
+            <div data-m="cont">{contHead}</div>
+            {blocks.map((b) =>
+              b.kind === 'el' ? (
+                <div key={b.key} data-m={`el-${b.key}`}>{b.node}</div>
+              ) : (
+                <div key={b.key}><LTable t={b.table} rows={b.table.rows} /></div>
+              ),
+            )}
+            <div data-m="footer">{footer(1, 1)}</div>
+          </div>
+        ))}
       </div>
     </>
   );

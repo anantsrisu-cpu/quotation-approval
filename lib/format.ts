@@ -21,7 +21,7 @@ export const num = (v: unknown): number => {
   const n = parseFloat(String(v ?? '').replace(/,/g, ''));
   return Number.isFinite(n) ? n : 0;
 };
-export const r2 = (n: number) => Math.round(n * 100) / 100;
+export const r2 = (n: number) => Math.round((n + (n >= 0 ? Number.EPSILON : -Number.EPSILON)) * 100) / 100;
 export const fmt = (n: number | null | undefined) =>
   Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 export const fmtQty = (n: number | null | undefined) =>

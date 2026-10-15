@@ -1,5 +1,5 @@
 'use client';
-import { compPrices, itemsOf } from '@/lib/calc';
+import { compDiscounts, compNets, compPrices, daysText, itemsOf, netOf, normDiscount } from '@/lib/calc';
 import { fmt, fmtQty, r2 } from '@/lib/format';
 import type { RequestRow } from '@/lib/types';
 
@@ -19,15 +19,19 @@ export function PrevPct({ pct }: { pct: number | null | undefined }) {
 /** Line items of a request: SKU, description, quantity, prices, previous price and change. */
 export function ItemsTable({ r }: { r: RequestRow }) {
   const items = itemsOf(r);
+  const hasDisc = items.some((it) => normDiscount(it.discount));
+  const span = hasDisc ? 8 : 6;
   return (
     <div className="tw">
-      <table className="t" style={{ minWidth: 720 }}>
+      <table className="t" style={{ minWidth: hasDisc ? 900 : 720 }}>
         <thead>
           <tr>
             <th style={{ width: 36 }}>#</th>
             <th>สินค้า · Item</th>
             <th style={R}>จำนวน</th>
             <th style={R}>ราคา/หน่วย ก่อน VAT</th>
+            {hasDisc && <th style={R}>ส่วนลด</th>}
+            {hasDisc && <th style={R}>ราคาสุทธิ/หน่วย</th>}
             <th style={R}>ราคาก่อนหน้า</th>
             <th style={R}>เปลี่ยนแปลง</th>
             <th style={R}>รวม ก่อน VAT</th>
@@ -35,7 +39,8 @@ export function ItemsTable({ r }: { r: RequestRow }) {
         </thead>
         <tbody>
           {items.map((it, i) => {
-            const pct = it.prev_diff_pct ?? (it.prev_price ? r2(((it.unit_price - it.prev_price) / it.prev_price) * 100) : null);
+            const net = netOf(it);
+            const pct = it.prev_diff_pct ?? (it.prev_price ? r2(((net - it.prev_price) / it.prev_price) * 100) : null);
             return (
               <tr key={i}>
                 <td className="note">{i + 1}</td>
@@ -45,17 +50,19 @@ export function ItemsTable({ r }: { r: RequestRow }) {
                 </td>
                 <td className="num" style={{ ...R, whiteSpace: 'nowrap' }}>{fmtQty(it.qty)} {it.unit}</td>
                 <td className="num" style={R}>{fmt(it.unit_price)}</td>
+                {hasDisc && <td className="num" style={R}>{normDiscount(it.discount) || '—'}</td>}
+                {hasDisc && <td className="num" style={R}><b>{fmt(net)}</b></td>}
                 <td className="num" style={R}>{it.prev_price != null ? fmt(it.prev_price) : <span className="note">—</span>}</td>
                 <td style={R}><PrevPct pct={pct} /></td>
-                <td className="num" style={R}>{fmt(it.line_total ?? r2(it.unit_price * it.qty))}</td>
+                <td className="num" style={R}>{fmt(it.line_total ?? r2(net * it.qty))}</td>
               </tr>
             );
           })}
         </tbody>
         <tfoot>
-          <tr><td colSpan={6} style={R}>มูลค่ารวม ก่อน VAT · Subtotal</td><td className="num" style={R}>{fmt(r.subtotal)}</td></tr>
-          <tr><td colSpan={6} style={R}>VAT {Math.round((r.vat_rate || 0.07) * 100)}%</td><td className="num" style={R}>{fmt(r.vat)}</td></tr>
-          <tr><td colSpan={6} style={R}><b>ยอดรวมสุทธิ (บาท) · Net total</b></td><td className="num" style={R}><b>{fmt(r.total)}</b></td></tr>
+          <tr><td colSpan={span} style={R}>มูลค่ารวม ก่อน VAT · Subtotal</td><td className="num" style={R}>{fmt(r.subtotal)}</td></tr>
+          <tr><td colSpan={span} style={R}>VAT {Math.round((r.vat_rate || 0.07) * 100)}%</td><td className="num" style={R}>{fmt(r.vat)}</td></tr>
+          <tr><td colSpan={span} style={R}><b>ยอดรวมสุทธิ (บาท) · Net total</b></td><td className="num" style={R}><b>{fmt(r.total)}</b></td></tr>
         </tfoot>
       </table>
     </div>
@@ -66,6 +73,12 @@ export function ItemsTable({ r }: { r: RequestRow }) {
 export function CompareTable({ r }: { r: RequestRow }) {
   const items = itemsOf(r);
   const comps = r.comparisons || [];
+  const n = items.length;
+  const cell = (price: number, disc: string, net: number) => (
+    <>
+      {disc ? <><span className="note">{fmt(price)} ลด {disc}</span><br /><b>{fmt(net)}</b></> : fmt(price)}
+    </>
+  );
   return (
     <div className="tw">
       <table className="t cmp" style={{ minWidth: 420 + comps.length * 130 }}>
@@ -84,8 +97,8 @@ export function CompareTable({ r }: { r: RequestRow }) {
               <td className="note">{k + 1}</td>
               <td><span className="mono" style={{ fontSize: 12 }}>{it.sku}</span> · {it.product_name}</td>
               <td className="num" style={{ ...R, whiteSpace: 'nowrap' }}>{fmtQty(it.qty)} {it.unit}</td>
-              <td className="num sel" style={R}>{fmt(it.unit_price)}</td>
-              {comps.map((c, i) => <td key={i} className="num" style={R}>{fmt(compPrices(c)[k])}</td>)}
+              <td className="num sel" style={R}>{cell(it.unit_price, normDiscount(it.discount), netOf(it))}</td>
+              {comps.map((c, i) => <td key={i} className="num" style={R}>{cell(compPrices(c)[k] || 0, compDiscounts(c, n)[k], compNets(c, n)[k])}</td>)}
             </tr>
           ))}
         </tbody>
@@ -108,6 +121,16 @@ export function CompareTable({ r }: { r: RequestRow }) {
                 {c.diff != null ? `${c.diff >= 0 ? '+' : '−'}${fmt(Math.abs(c.diff))}` : '—'}
               </td>
             ))}
+          </tr>
+          <tr>
+            <td colSpan={3}>เครดิต · Credit</td>
+            <td className="sel" style={R}>{daysText(r.credit_days)}</td>
+            {comps.map((c, i) => <td key={i} style={R}>{daysText(c.credit_days)}</td>)}
+          </tr>
+          <tr>
+            <td colSpan={3}>Lead time</td>
+            <td className="sel" style={R}>{daysText(r.lead_days)}</td>
+            {comps.map((c, i) => <td key={i} style={R}>{daysText(c.lead_days)}</td>)}
           </tr>
         </tfoot>
       </table>
