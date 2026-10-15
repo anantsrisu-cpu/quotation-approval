@@ -1,29 +1,30 @@
 'use client';
 
-/** Render an on-screen letter element into an A4 PDF (keeps Thai web fonts and signatures). */
+/**
+ * Render the on-screen letter into an A4 PDF, one PDF page per letter page
+ * (keeps Thai web fonts and signatures). Pages are laid out by CoverLetter.
+ */
 export async function elementToPdf(el: HTMLElement): Promise<Blob> {
   const [{ default: html2canvas }, { jsPDF }] = await Promise.all([import('html2canvas'), import('jspdf')]);
   if (document.fonts?.ready) await document.fonts.ready;
-  const canvas = await html2canvas(el, { scale: 2, backgroundColor: '#ffffff', useCORS: true, logging: false });
+  // wait (max 3 s) until the letter has been split into pages
+  for (let i = 0; i < 30 && el.dataset.ready === '0'; i++) await new Promise((r) => setTimeout(r, 100));
+  const pages = Array.from(el.querySelectorAll<HTMLElement>(':scope > .letter'));
+  const list = pages.length ? pages : [el];
   const pdf = new jsPDF({ unit: 'mm', format: 'a4', compress: true });
   const W = 210;
   const H = 297;
-  const h = (canvas.height * W) / canvas.width;
-  const img = canvas.toDataURL('image/jpeg', 0.92);
-  // A letter that is only slightly taller than A4 is shrunk onto one page instead of spilling a few lines
-  if (h > H && h <= H * 1.12) {
-    const w = (W * H) / h;
-    pdf.addImage(img, 'JPEG', (W - w) / 2, 0, w, H);
-    return pdf.output('blob');
-  }
-  pdf.addImage(img, 'JPEG', 0, 0, W, h);
-  let left = h - H;
-  let y = 0;
-  while (left > 1) {
-    y -= H;
-    pdf.addPage();
-    pdf.addImage(img, 'JPEG', 0, y, W, h);
-    left -= H;
+  for (let i = 0; i < list.length; i++) {
+    const canvas = await html2canvas(list[i], { scale: 2, backgroundColor: '#ffffff', useCORS: true, logging: false });
+    const img = canvas.toDataURL('image/jpeg', 0.92);
+    const h = (canvas.height * W) / canvas.width;
+    if (i > 0) pdf.addPage();
+    if (h <= H + 0.5) pdf.addImage(img, 'JPEG', 0, 0, W, Math.min(h, H));
+    else {
+      // a page that grew past A4 (one very long item) is scaled down to fit
+      const w = (W * H) / h;
+      pdf.addImage(img, 'JPEG', (W - w) / 2, 0, w, H);
+    }
   }
   return pdf.output('blob');
 }

@@ -75,7 +75,7 @@ export function ReqTable({ list, empty, actions }: { list: RequestRow[]; empty?:
                 <Link href={`/requests/${r.id}`} style={{ color: 'inherit', textDecoration: 'none' }}>
                   <b style={{ fontWeight: 500 }}>{SUBJ[r.subject_type]} · {r.product_name || r.sku || '—'}</b>
                 </Link>
-                <div className="note">{r.vendor || '—'} · {name(r.preparer_id)}</div>
+                <div className="note">{r.vendor || '—'} · {name(r.preparer_id)}{r.created_by && r.created_by !== r.preparer_id ? ` · จัดทำแทนโดย ${name(r.created_by)}` : ''}</div>
               </td>
               <td className="num" style={{ textAlign: 'right' }}>{r.total ? fmt(r.total) : '—'}</td>
               <td>
@@ -133,4 +133,4 @@ export function PageHead({ title, lead, children }: { title: React.ReactNode; le
 
 /** Columns used by every request list (no signature images). */
 export const LIST_COLS =
-  'id,no,status,preparer_id,subject_type,sku,product_name,total,vendor,dept,created_at,submitted_at,current_step,step_since,completed_at,buyer_id,request_steps(step_no,position,approver_id,status,signer_id,on_behalf_of)';
+  'id,no,status,preparer_id,created_by,subject_type,sku,product_name,total,vendor,dept,created_at,submitted_at,current_step,step_since,completed_at,buyer_id,request_steps(step_no,position,approver_id,status,signer_id,on_behalf_of)';

@@ -11,7 +11,7 @@ export default function MyRequests() {
 
   useEffect(() => {
     if (!uid) return;
-    sb.from('requests').select(LIST_COLS).eq('preparer_id', uid).order('created_at', { ascending: false }).limit(200)
+    sb.from('requests').select(LIST_COLS).or(`preparer_id.eq.${uid},created_by.eq.${uid}`).order('created_at', { ascending: false }).limit(200)
       .then(({ data }) => setList((data as unknown as RequestRow[]) || []));
   }, [sb, uid, bump]);
 
@@ -19,7 +19,7 @@ export default function MyRequests() {
   return (
     <>
       <PageHead title="คำขออนุมัติของฉัน" lead="My approval requests — see which approver each one is waiting on">
-        {has('preparer') && <Link className="btn p" href="/requests/new">+ สร้างคำขอใหม่ · New request</Link>}
+        {(has('preparer') || has('admin')) && <Link className="btn p" href="/requests/new">+ สร้างคำขอใหม่ · New request</Link>}
       </PageHead>
       <div className="tiles">
         <div className="tile"><span>ฉบับร่าง · Draft</span><b>{c('draft')}</b></div>

@@ -127,7 +127,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
       <div className="shell">
         {active && (
           <nav className="nav" aria-label="เมนู · Menu">
-            {has('preparer') && (
+            {(has('preparer') || has('admin')) && (
               <div>
                 <h3>ผู้จัดทำ · PREPARER</h3>
                 <NavLink href="/requests" th="คำขอของฉัน" en="My requests" exact />

@@ -6,7 +6,9 @@ import { useApp } from '@/components/AppProvider';
 import { CoverLetter } from '@/components/CoverLetter';
 import { SignaturePad, type PadHandle } from '@/components/SignaturePad';
 import { Chain, Chip, Loading, Modal } from '@/components/ui';
-import { PURP, SUBJ, dt, fileSize, fmt, fmtQty } from '@/lib/format';
+import { PURP, SUBJ, dt, fileSize, fmt } from '@/lib/format';
+import { itemsOf } from '@/lib/calc';
+import { CompareTable, ItemsTable } from '@/components/ItemTables';
 import { downloadUrl, elementToPdf } from '@/lib/pdf';
 import { reportError } from '@/lib/errors';
 import type { LogEntry, RequestFile, RequestRow, RequestStep } from '@/lib/types';
@@ -59,7 +61,8 @@ export default function RequestDetail() {
   const cur = r ? steps.find((s) => s.step_no === r.current_step) : undefined;
   const mine = !!r && r.status === 'pending' && cur?.approver_id === uid;
   const isLast = !!cur && cur.step_no === Math.max(...steps.map((s) => s.step_no));
-  const isPrep = r?.preparer_id === uid;
+  const isPrep = r?.preparer_id === uid || (!!r?.created_by && r.created_by === uid && has('admin'));
+  const proxy = !!r?.created_by && r.created_by !== r.preparer_id;
   const involved = !!r && (isPrep || r.buyer_id === uid || steps.some((s) => [s.approver_id, s.signer_id, s.on_behalf_of].includes(uid)) || has('admin'));
 
   /** Build the PDF from the on-screen letter and store it (runs once after final approval). */
@@ -201,7 +204,7 @@ export default function RequestDetail() {
         <div className="row" style={{ gap: 10 }}>
           {isPrep && r.status === 'draft' && <Link className="btn o" href={`/requests/new?id=${r.id}`}>แก้ไขฉบับร่าง · Edit draft</Link>}
           {isPrep && r.status === 'rejected' && <button className="btn o" disabled={!!busy} onClick={reopen}>แก้ไขและส่งใหม่ · Edit &amp; resend</button>}
-          {isPrep && has('preparer') && <Link className="btn" href={`/requests/new?copy=${r.id}`}>ใช้เป็นแบบคำขอใหม่ · Copy to new</Link>}
+          {isPrep && (has('preparer') || has('admin')) && <Link className="btn" href={`/requests/new?copy=${r.id}`}>ใช้เป็นแบบคำขอใหม่ · Copy to new</Link>}
           {(isPrep || has('admin')) && (r.status === 'pending' || r.status === 'draft') && (
             <button className="btn d" onClick={() => { setReason(''); setModal('cancel'); }}>ยกเลิกคำขอ · Cancel</button>
           )}
@@ -229,20 +232,20 @@ export default function RequestDetail() {
             <dl className="kv">
               {[
                 ['เรื่อง · Subject', SUBJ[r.subject_type]],
-                ['SKU / สินค้า', `${r.sku} · ${r.product_name}`],
+                ['จำนวนรายการ · Items', `${itemsOf(r).length} รายการ`],
                 ['ฝ่ายที่ขอซื้อ · Department', deptTh(r.dept)],
                 ['ซื้อเพื่อ · Purpose', PURP[r.purpose]],
                 ['ผู้ขาย · Vendor', r.vendor],
                 ['เลขที่ใบเสนอราคา · Quote no.', r.quote_no || '—'],
                 ['ผู้ซื้อ · Buyer', name(r.buyer_id)],
                 ['บริษัทผู้ซื้อ · Buyer company', co?.th || '—'],
-                ['ผู้จัดทำ · Prepared by', name(r.preparer_id)],
+                ['ผู้จัดทำ · Prepared by', name(r.preparer_id) + (proxy ? ` (จัดทำแทนโดย ${name(r.created_by)})` : '')],
                 ['ระดับวงเงิน · Tier', r.tier_label || '—'],
               ].map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v || '—'}</dd></div>)}
             </dl>
             <div className="tiles">
-              <div className="tile"><span>ราคาต่อหน่วย × จำนวน</span><b style={{ fontSize: 17 }} className="num">{fmt(r.unit_price)} × {fmtQty(r.qty)} {r.unit}</b></div>
-              <div className="tile"><span>มูลค่ารวม ก่อน VAT</span><b style={{ fontSize: 20 }} className="num">{fmt(r.subtotal || r.unit_price * r.qty)}</b></div>
+              <div className="tile"><span>จำนวนรายการ · Items</span><b style={{ fontSize: 20 }} className="num">{itemsOf(r).length}</b></div>
+              <div className="tile"><span>มูลค่ารวม ก่อน VAT</span><b style={{ fontSize: 20 }} className="num">{fmt(r.subtotal)}</b></div>
               <div className="tile"><span>VAT</span><b style={{ fontSize: 20 }} className="num">{fmt(r.vat)}</b></div>
               <div className="tile"><span>ยอดรวมสุทธิ (บาท)</span><b className="num">{fmt(r.total)}</b></div>
             </div>
@@ -251,21 +254,16 @@ export default function RequestDetail() {
           </div>
 
           <div className="card">
+            <h2>รายการสินค้า · Items ({itemsOf(r).length})</h2>
+            <ItemsTable r={r} />
+          </div>
+
+          <div className="card">
             <h2>คู่เทียบราคา · Price comparison</h2>
             {r.no_comp ? (
               <div className="warn-box">ไม่มีคู่เทียบ · เหตุผล: {r.no_comp_reason}</div>
             ) : (
-              <div className="tw">
-                <table className="t" style={{ minWidth: 560 }}>
-                  <thead><tr><th>ผู้ขาย</th><th style={{ textAlign: 'right' }}>ราคาต่อหน่วย</th><th style={{ textAlign: 'right' }}>มูลค่ารวม ก่อน VAT</th><th style={{ textAlign: 'right' }}>รวม VAT</th><th style={{ textAlign: 'right' }}>ส่วนต่าง</th></tr></thead>
-                  <tbody>
-                    <tr style={{ fontWeight: 600 }}><td>{r.vendor} ✓</td><td className="num" style={{ textAlign: 'right' }}>{fmt(r.unit_price)}</td><td className="num" style={{ textAlign: 'right' }}>{fmt(r.subtotal)}</td><td className="num" style={{ textAlign: 'right' }}>{fmt(r.total)}</td><td style={{ textAlign: 'right' }}>ผู้ขายที่เลือก</td></tr>
-                    {(r.comparisons || []).map((x, i) => (
-                      <tr key={i}><td>{x.vendor}</td><td className="num" style={{ textAlign: 'right' }}>{fmt(x.unit_price)}</td><td className="num" style={{ textAlign: 'right' }}>{x.subtotal != null ? fmt(x.subtotal) : '—'}</td><td className="num" style={{ textAlign: 'right' }}>{x.total != null ? fmt(x.total) : '—'}</td><td className="num" style={{ textAlign: 'right' }}>{x.diff != null ? `${x.diff >= 0 ? '+' : '−'}${fmt(Math.abs(x.diff))}` : '—'}</td></tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <CompareTable r={r} />
             )}
             {r.low_reason && <div className="warn-box">ไม่ใช่ราคาต่ำสุด เหตุผล: {r.low_reason}</div>}
             <div>

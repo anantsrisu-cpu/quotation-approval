@@ -35,9 +35,26 @@ export interface Company {
 }
 export interface Product { sku: string; name: string; category: string; unit: string; active: boolean; updated_at?: string }
 
+export interface LineItem {
+  sku: string;
+  product_name?: string;
+  description?: string;
+  qty: number;
+  unit: string;
+  unit_price: number;
+  prev_price: number | null;
+  line_total?: number;
+  prev_diff_pct?: number | null;
+}
+
 export interface Comparison {
   vendor: string;
-  unit_price: number;
+  /** unit price per line item (same order as items) */
+  prices?: number[];
+  /** line totals per item, filled by the server on submit */
+  lines?: number[];
+  /** older single-item requests */
+  unit_price?: number;
   subtotal?: number;
   total?: number;
   diff?: number;
@@ -62,6 +79,7 @@ export interface RequestRow {
   no: string | null;
   status: RequestStatus;
   preparer_id: string;
+  created_by?: string | null;
   subject_type: 'stock' | 'general' | 'hire';
   sku: string;
   product_name: string;
@@ -80,6 +98,7 @@ export interface RequestRow {
   quote_no: string;
   quote_date: string | null;
   details: string;
+  items: LineItem[];
   comparisons: Comparison[];
   no_comp: boolean;
   no_comp_reason: string;
@@ -117,6 +136,11 @@ export interface AppError {
   id: number; user_id: string | null; at: string; page: string; action: string; message: string;
   detail: string; user_agent: string; status: 'open' | 'investigating' | 'fixed' | 'ignored';
   admin_note: string; updated_at: string;
+}
+
+export interface UserInvite {
+  email: string; name: string; title: string; dept: string | null; roles: Role[]; position: string | null;
+  signature: string | null; created_by: string | null; created_at: string; used_at: string | null; used_by: string | null;
 }
 
 export interface ApproverPreview {

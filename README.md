@@ -70,6 +70,8 @@ Every state change goes through database functions, so amounts, approvers and si
 1. ที่ [supabase.com/dashboard](https://supabase.com/dashboard) กด **New project** ตั้งชื่อ เช่น `quotation-approval` เลือก Region **Southeast Asia (Singapore)** และตั้งรหัสผ่านฐานข้อมูล (เก็บไว้)
 2. เมื่อสร้างเสร็จ ไปที่ **SQL Editor → New query** แล้ววางเนื้อหาไฟล์ [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql) ทั้งไฟล์ กด **Run**
 3. New query อีกครั้ง วาง [`supabase/migrations/0002_seed.sql`](supabase/migrations/0002_seed.sql) กด **Run** (ค่าเริ่มต้น: ตำแหน่ง วงเงิน 3 ระดับ ฝ่าย และบริษัทตัวอย่าง — แก้ได้ในแอป)
+   ต่อด้วย [`supabase/migrations/0003_items_proxy_invites.sql`](supabase/migrations/0003_items_proxy_invites.sql) กด **Run** (หลายรายการต่อคำขอ ราคาก่อนหน้า สร้างบัญชีล่วงหน้า และผู้ดูแลร่างคำขอแทน)
+   > ระบบที่ใช้งานอยู่แล้ว: รันเฉพาะ `0003` ไฟล์เดียว ข้อมูลเดิมถูกแปลงให้อัตโนมัติ และรันซ้ำได้โดยไม่เสียหาย
 4. ไปที่ **Project Settings → API** (หรือ **Data API / API Keys**) จดค่า:
    - **Project URL** → ใช้เป็น `NEXT_PUBLIC_SUPABASE_URL`
    - **anon public** key (หรือ **publishable** key) → ใช้เป็น `NEXT_PUBLIC_SUPABASE_ANON_KEY`
@@ -174,7 +176,9 @@ createdb qa_test
 psql -d qa_test -f supabase/tests/00_supabase_stub.sql   # stand-in for Supabase auth/storage
 psql -d qa_test -f supabase/migrations/0001_init.sql
 psql -d qa_test -f supabase/migrations/0002_seed.sql
+psql -d qa_test -f supabase/migrations/0003_items_proxy_invites.sql
 psql -d qa_test -v ON_ERROR_STOP=1 -f supabase/tests/10_workflow_test.sql   # ends with: ALL TESTS PASSED
+psql -d qa_test -v ON_ERROR_STOP=1 -f supabase/tests/20_items_proxy_test.sql   # ends with: ALL 0003 TESTS PASSED
 ```
 ครอบคลุม · Covers: first admin, applications, self-promotion blocked, server-side amounts and tiers, approver resolution by department, signatures required, forward rules, reject → reopen → resend (keeps number), admin remind/reassign/cancel, letter path rules, visibility for outsiders, disabled accounts.
 

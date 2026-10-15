@@ -93,7 +93,7 @@ select t_check('preview: dm falls back when dept has no dm', (select approver_na
 select 'submitted ' || submit_request('11111111-1111-1111-1111-111111111111', 'ด่วน')::text;
 select t_check('amounts recomputed server-side', (select subtotal=174300 and vat=12201 and total=186501 and sku='AC-INV-18000' and product_name like 'เครื่องปรับอากาศ%' from requests where id='11111111-1111-1111-1111-111111111111'));
 select t_check('number assigned', (select no ~ '^QT-\d{4}-0001$' from requests where id='11111111-1111-1111-1111-111111111111'));
-select t_check('comparison totals stored', (select (comparisons->0->>'total')::numeric = 198891.60 from requests where id='11111111-1111-1111-1111-111111111111'));
+select t_check('comparison totals stored', (select jsonb_array_length(comparisons)=2 and (comparisons->0->>'total')::numeric = 198891.60 from requests where id='11111111-1111-1111-1111-111111111111'));
 update requests set unit_price=1 where id='11111111-1111-1111-1111-111111111111';
 select t_check('cannot edit after submit (row locked by status)', (select unit_price=29050 from requests where id='11111111-1111-1111-1111-111111111111'));
 select t_expect_error('cannot change status column', $$ update requests set status='approved' where id='11111111-1111-1111-1111-111111111111' $$);
@@ -157,7 +157,7 @@ select t_expect_error('reject needs a comment', $$ select reject_request('222222
 select reject_request('22222222-2222-2222-2222-222222222222','ราคาสูงไป');
 select t_as('00000000-0000-0000-0000-000000000001');
 select reopen_request('22222222-2222-2222-2222-222222222222');
-update requests set unit_price=18000 where id='22222222-2222-2222-2222-222222222222';
+update requests set unit_price=18000, items=jsonb_set(items,'{0,unit_price}','18000') where id='22222222-2222-2222-2222-222222222222';
 select submit_request('22222222-2222-2222-2222-222222222222');
 select t_check('resent keeps number 0002', (select no like '%-0002' and status='pending' and total=19260 from requests where id='22222222-2222-2222-2222-222222222222'));
 
