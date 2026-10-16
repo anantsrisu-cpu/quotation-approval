@@ -273,3 +273,6 @@ grant  execute on all functions in schema public to authenticated;
 revoke execute on function public.notify(uuid, uuid, text, text, text) from authenticated;
 revoke execute on function public.add_log(uuid, text, text, text, uuid) from authenticated;
 revoke execute on function public.handle_new_user() from authenticated;
+
+-- tell the Supabase API about the new columns right away
+notify pgrst, 'reload schema';

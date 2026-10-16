@@ -96,6 +96,8 @@ export function errText(e: unknown): string {
   const m = anyE.message || anyE.error_description || String(e);
   if (/Failed to fetch|NetworkError|network/i.test(m)) return 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ ตรวจอินเทอร์เน็ตแล้วลองอีกครั้ง · Cannot reach the server';
   if (/JWT|session/i.test(m) && /expired|invalid/i.test(m)) return 'หมดเวลาการเข้าสู่ระบบ กรุณาเข้าสู่ระบบใหม่ · Session expired, please sign in again';
+  if (/PGRST204|schema cache|column .* does not exist|function .* does not exist/i.test(m))
+    return 'ฐานข้อมูลยังไม่ได้อัปเดตเป็นเวอร์ชันล่าสุด ผู้ดูแลต้องรันไฟล์ SQL ล่าสุด (supabase/migrations) ใน Supabase SQL Editor · Database not updated: run the latest SQL migrations';
   if (/row-level security|permission denied/i.test(m)) return 'คุณไม่มีสิทธิ์ทำรายการนี้ · You do not have permission for this';
   return m;
 }
