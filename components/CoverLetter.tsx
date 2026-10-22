@@ -1,6 +1,7 @@
 'use client';
 import { forwardRef, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useApp } from './AppProvider';
+import { CompareSheet, useSheetData } from './CompareSheet';
 import { compDiscounts, compNets, compPrices, itemsOf, netOf, normDiscount, prevPct } from '@/lib/calc';
 import { PURP, SUBJ, bahtText, dOnly, enDate, fmt, fmtQty, thDate, verifyCode } from '@/lib/format';
 import type { RequestRow, RequestStep } from '@/lib/types';
@@ -89,7 +90,9 @@ const C = { textAlign: 'center' as const };
  * draft preview (watermarked) and for the final PDF. Long item lists continue on
  * page 2, 3 … with the table header repeated; signatures come at the end.
  */
-export const CoverLetter = forwardRef<HTMLElement, { r: RequestRow; steps: RequestStep[]; draft?: boolean }>(function CoverLetter({ r, steps, draft }, ref) {
+export const CoverLetter = forwardRef<HTMLElement, { r: RequestRow; steps: RequestStep[]; draft?: boolean; rev?: number }>(function CoverLetter({ r, steps, draft, rev = 0 }, ref) {
+  const sheet = useSheetData(r, steps, !!draft, rev);
+  const [sheetReady, setSheetReady] = useState(false);
   const { company, logoUrl, deptTh, name, people, posTh, settings } = useApp();
   const co = company(r.company_id);
   const logo = logoUrl(co);
@@ -442,7 +445,7 @@ export const CoverLetter = forwardRef<HTMLElement, { r: RequestRow; steps: Reque
 
   return (
     <>
-      <section className="letter-pages" ref={ref} data-ready={pages ? '1' : '0'} aria-label="หนังสืออนุมัติใบเสนอราคา">
+      <section className="letter-pages" ref={ref} data-ready={pages && sheetReady ? '1' : '0'} aria-label="หนังสืออนุมัติใบเสนอราคา">
         {shown.map((parts, p) => (
           <article className={layout?.compact ? 'letter compact' : 'letter'} key={p} aria-label={`หน้า ${p + 1} · Page ${p + 1}`}>
             {draft && <span className="wm" aria-hidden="true">ร่าง · DRAFT</span>}
@@ -451,6 +454,8 @@ export const CoverLetter = forwardRef<HTMLElement, { r: RequestRow; steps: Reque
             {footer(p + 1, shown.length)}
           </article>
         ))}
+        {/* ตารางเปรียบเทียบราคา (แนวนอน) ต่อท้ายหนังสือ · landscape comparison sheet after the letter */}
+        <CompareSheet data={sheet} onReady={() => setSheetReady(true)} />
       </section>
       {/* off-screen copy used only to measure block heights */}
       <div className="letter-measure" aria-hidden="true">

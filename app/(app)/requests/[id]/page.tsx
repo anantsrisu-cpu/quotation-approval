@@ -237,6 +237,7 @@ export default function RequestDetail() {
                 ['ซื้อเพื่อ · Purpose', PURP[r.purpose]],
                 ['ผู้ขาย · Vendor', r.vendor],
                 ['เครดิต / Lead time', `${daysText(r.credit_days)} / ${daysText(r.lead_days)}`],
+                ['การรับประกัน · Warranty', r.warranty || '—'],
                 ['เลขที่ใบเสนอราคา · Quote no.', r.quote_no || '—'],
                 ['ผู้ซื้อ · Buyer', name(r.buyer_id)],
                 ['บริษัทผู้ซื้อ · Buyer company', co?.th || '—'],
@@ -362,7 +363,7 @@ export default function RequestDetail() {
           {r.status === 'approved' ? 'อนุมัติครบแล้ว เอกสารล็อก แก้ไขไม่ได้ บันทึกเป็น PDF เท่านั้น · Locked; saved as PDF only' : 'ยังไม่อนุมัติครบ แสดงเป็นร่าง · Not fully approved — shown as draft'}
         </span>
         <div className="letter-wrap">
-          <CoverLetter ref={letterRef} r={r} steps={steps} draft={r.status !== 'approved'} />
+          <CoverLetter ref={letterRef} r={r} steps={steps} draft={r.status !== 'approved'} rev={log.filter((l) => l.kind === 'reopened').length} />
         </div>
       </div>
 

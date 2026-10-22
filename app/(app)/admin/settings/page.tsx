@@ -48,7 +48,7 @@ function Positions() {
       if (!p.code || !p.th.trim()) return toast('bad', 'กรอกรหัสและชื่อตำแหน่งให้ครบ · Code and Thai name required', '');
       if (!/^[a-z0-9_]{1,20}$/.test(p.code)) return toast('bad', 'รหัสตำแหน่งใช้ a–z 0–9 _ · Code: a–z, 0–9, _', p.code);
     }
-    const { ok } = await run('save-positions', sb.from('positions').upsert(rows.map(({ code, th, en, sort }) => ({ code, th: th.trim(), en: en.trim(), sort: Number(sort) || 0 }))));
+    const { ok } = await run('save-positions', sb.from('positions').upsert(rows.map(({ code, th, en, sort, note }) => ({ code, th: th.trim(), en: en.trim(), sort: Number(sort) || 0, note: (note || '').trim() }))));
     if (ok) { toast('ok', 'บันทึกตำแหน่งแล้ว · Positions saved', ''); reloadRefs(); }
   }
   async function remove(code: string) {
@@ -59,7 +59,7 @@ function Positions() {
     <div className="card">
       <div className="actions"><h2>ตำแหน่งผู้อนุมัติ · Approver positions</h2>
         <div className="row" style={{ gap: 8 }}>
-          <button className="btn sm" onClick={() => setRows([...rows, { code: '', th: '', en: '', sort: (rows.at(-1)?.sort || 0) + 10, isNew: true }])}>+ เพิ่ม · Add</button>
+          <button className="btn sm" onClick={() => setRows([...rows, { code: '', th: '', en: '', sort: (rows.at(-1)?.sort || 0) + 10, note: '', isNew: true }])}>+ เพิ่ม · Add</button>
           <button className="btn p sm" onClick={save}>บันทึก · Save</button>
         </div>
       </div>
@@ -69,6 +69,7 @@ function Positions() {
           <label className="f" style={{ flex: '1 1 110px' }}>รหัส · Code<input className="in mono" value={p.code} disabled={!p.isNew} onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, code: e.target.value.toLowerCase() } : x)))} /></label>
           <label className="f" style={{ flex: '3 1 200px' }}>ชื่อ (ไทย)<input className="in" value={p.th} onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, th: e.target.value } : x)))} /></label>
           <label className="f" style={{ flex: '3 1 200px' }}>ชื่อ (อังกฤษ)<input className="in" value={p.en} onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, en: e.target.value } : x)))} /></label>
+          <label className="f" style={{ flex: '3 1 220px' }}>ช่วงวงเงิน (แสดงในตารางเปรียบเทียบ)<input className="in" value={p.note || ''} maxLength={120} placeholder="เช่น (มูลค่า 1 - 1,000,000 บาท)" onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, note: e.target.value } : x)))} /></label>
           <label className="f" style={{ flex: '1 1 80px' }}>ลำดับ<input className="in r" inputMode="numeric" value={p.sort} onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, sort: Number(e.target.value) || 0 } : x)))} /></label>
           {p.isNew ? <button className="icon-btn" onClick={() => setRows(rows.filter((_, j) => j !== i))} aria-label="ลบ">✕</button>
             : <button className="btn sm d" onClick={() => remove(p.code)} title="ลบได้เมื่อไม่มีผู้ใช้หรือคำขอใช้ตำแหน่งนี้">ลบ</button>}

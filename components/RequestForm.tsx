@@ -22,6 +22,7 @@ interface Draft {
   vendor: string;
   credit_days: string;
   lead_days: string;
+  warranty: string;
   quote_no: string;
   quote_date: string;
   details: string;
@@ -85,7 +86,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
       subject_type: 'general', items: [blankItem()],
       dept: (forUser && people[forUser]?.dept) || me?.dept || departments[0]?.id || '', purpose: 'replace', buyer_id: '',
       company_id: companies.find((c) => c.active)?.id || '', vendor: '', quote_no: '', quote_date: today(),
-      credit_days: '', lead_days: '',
+      credit_days: '', lead_days: '', warranty: '',
       details: '', comps: [blankComp(1), blankComp(1)],
       no_comp: false, no_comp_reason: '', low_reason: '',
     }),
@@ -125,12 +126,12 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
       }
       const its = itemsOf(r);
       const items: DraftItem[] = its.length
-        ? its.map((it) => ({ sku: it.sku, description: it.description || '', qty: String(it.qty || 1), unit: it.unit || 'ชิ้น', unit_price: money(it.unit_price), discount: it.discount || '', prev_price: it.prev_price != null ? fmt(it.prev_price) : '' }))
+        ? its.map((it) => ({ sku: it.sku, description: it.description || '', qty: String(it.qty || 1), unit: it.unit || 'ชิ้น', unit_price: money(it.unit_price), discount: it.discount || '', prev_price: it.prev_price != null ? fmt(it.prev_price) : '', prev_vendor: it.prev_vendor || '', prev_date: it.prev_date || '', brand: it.brand || '' }))
         : [blankItem()];
       const comps: DraftComp[] = (r.comparisons || []).map((c) => {
         const ps = compPrices(c);
         const ds = compDiscounts(c, items.length);
-        return { vendor: c.vendor, prices: items.map((_, k) => money(ps[k])), discounts: ds, credit_days: c.credit_days != null ? String(c.credit_days) : '', lead_days: c.lead_days != null ? String(c.lead_days) : '' };
+        return { vendor: c.vendor, prices: items.map((_, k) => money(ps[k])), discounts: ds, credit_days: c.credit_days != null ? String(c.credit_days) : '', lead_days: c.lead_days != null ? String(c.lead_days) : '', warranty: c.warranty || '' };
       });
       const keepPreparer = draftId || r.preparer_id === me?.id || isAdmin;
       setD({
@@ -140,7 +141,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
         quote_no: copyFrom ? '' : r.quote_no, quote_date: copyFrom ? today() : r.quote_date || today(),
         details: r.details,
         comps: comps.length ? comps : [blankComp(items.length)],
-        credit_days: r.credit_days != null ? String(r.credit_days) : '', lead_days: r.lead_days != null ? String(r.lead_days) : '',
+        credit_days: r.credit_days != null ? String(r.credit_days) : '', lead_days: r.lead_days != null ? String(r.lead_days) : '', warranty: r.warranty || '',
         no_comp: r.no_comp, no_comp_reason: r.no_comp_reason, low_reason: r.low_reason,
       });
       if (draftId) {
@@ -275,6 +276,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
     d.items.map((it, i) => ({
       sku: skuKey(it.sku), product_name: nameOf(it), description: it.description.trim(),
       qty: c.lines[i].q, unit: it.unit, unit_price: c.lines[i].up, discount: it.discount.replace(/[\s,]/g, ''), prev_price: c.lines[i].prev,
+      prev_vendor: it.prev_vendor.trim(), prev_date: it.prev_date || null, brand: it.brand.trim(),
     }));
   const row = () => {
     const items = rowItems();
@@ -291,6 +293,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
       dept: d.dept || null,
       credit_days: parseDays(d.credit_days).days,
       lead_days: parseDays(d.lead_days).days,
+      warranty: d.warranty.trim(),
       purpose: d.purpose,
       buyer_id: d.buyer_id || null,
       company_id: d.company_id || null,
@@ -300,7 +303,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
       details: d.details,
       comparisons: d.no_comp ? [] : d.comps.map((x) => ({
         vendor: x.vendor.trim(), prices: x.prices.map((p) => num(p)), discounts: x.discounts.map((v) => v.replace(/[\s,]/g, '')),
-        credit_days: parseDays(x.credit_days).days, lead_days: parseDays(x.lead_days).days,
+        credit_days: parseDays(x.credit_days).days, lead_days: parseDays(x.lead_days).days, warranty: x.warranty.trim(),
       })),
       no_comp: d.no_comp,
       no_comp_reason: d.no_comp ? d.no_comp_reason : '',
@@ -397,7 +400,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
   const previewRow: RequestRow = {
     id: id || 'draft', no, status: 'draft', preparer_id: d.preparer_id || me.id, created_by: me.id, subject_type: d.subject_type,
     items: rowItems().map((it, i) => ({ ...it, product_name: it.product_name || '[ชื่อสินค้า]', net_price: c.lines[i].net, line_total: c.lines[i].line, prev_diff_pct: c.lines[i].pct })),
-    credit_days: parseDays(d.credit_days).days, lead_days: parseDays(d.lead_days).days,
+    credit_days: parseDays(d.credit_days).days, lead_days: parseDays(d.lead_days).days, warranty: d.warranty,
     sku: skuKey(d.items[0].sku), product_name: summaryName, qty: n === 1 ? c.lines[0].q : n, unit: n === 1 ? d.items[0].unit : 'รายการ',
     unit_price: n === 1 ? c.lines[0].net : 0, subtotal: c.sub, vat: c.vat, total: c.total, vat_rate: vatRate, dept: d.dept, purpose: d.purpose,
     buyer_id: d.buyer_id, company_id: d.company_id, vendor: d.vendor || '[ผู้ขาย]', quote_no: d.quote_no,
@@ -405,7 +408,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
     comparisons: d.no_comp ? [] : c.comps.map((x, ci) => ({
       vendor: x.vendor, prices: x.lines.map((l) => l.up), discounts: d.comps[ci].discounts, nets: x.lines.map((l) => l.net),
       lines: x.lines.map((l) => l.line), subtotal: x.sub, total: x.total, diff: x.diff,
-      credit_days: parseDays(d.comps[ci].credit_days).days, lead_days: parseDays(d.comps[ci].lead_days).days,
+      credit_days: parseDays(d.comps[ci].credit_days).days, lead_days: parseDays(d.comps[ci].lead_days).days, warranty: d.comps[ci].warranty,
     })),
     no_comp: d.no_comp, no_comp_reason: d.no_comp_reason, low_reason: c.lowest ? '' : d.low_reason, message,
     tier_label: approvers[0]?.tier_label || '', current_step: 0, preparer_signature: null, created_at: new Date().toISOString(),
@@ -473,6 +476,9 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
               <input className="in r" inputMode="numeric" id="f-lead" value={d.lead_days} placeholder="เช่น 7" onChange={(e) => set('lead_days', e.target.value)} />
             </label>
           </div>
+          <label className="f" htmlFor="f-warranty">การรับประกัน · Warranty
+            <input className="in" id="f-warranty" value={d.warranty} maxLength={200} placeholder="เช่น 1 ปี" onChange={(e) => set('warranty', e.target.value)} />
+          </label>
           <label className="f" htmlFor="f-quote">เลขที่ใบเสนอราคาผู้ขาย · Vendor quote no.
             <input className="in" id="f-quote" value={d.quote_no} onChange={(e) => set('quote_no', e.target.value)} />
           </label>
@@ -538,12 +544,23 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
                         onChange={(e) => setItem(i, { discount: e.target.value })}
                         onPaste={(e) => pasteDown(e, (k, v) => setItem(k, { discount: v }), i)} />
                     </label>
-                    <label className="f" htmlFor={`pp${i}`}>ราคาก่อนหน้า
+                    <div className="f">รวม (ก่อน VAT)<div className="ro">{fmt(L.line)}</div></div>
+                  </div>
+                  <div className="item-grid2">
+                    <label className="f" htmlFor={`br${i}`}>Brand
+                      <input className="in" id={`br${i}`} value={it.brand} maxLength={100} placeholder="ไม่บังคับ" onChange={(e) => setItem(i, { brand: e.target.value })} />
+                    </label>
+                    <label className="f" htmlFor={`pp${i}`}>ราคาประวัติเก่า/หน่วย
                       <input className="in r" inputMode="decimal" id={`pp${i}`} value={it.prev_price} placeholder="ไม่บังคับ"
                         onChange={(e) => setItem(i, { prev_price: e.target.value })} onBlur={() => L.prev != null && L.prev > 0 && setItem(i, { prev_price: fmt(L.prev) })}
                         onPaste={(e) => pasteDown(e, (k, v) => setItem(k, { prev_price: v }), i)} />
                     </label>
-                    <div className="f">รวม (ก่อน VAT)<div className="ro">{fmt(L.line)}</div></div>
+                    <label className="f" htmlFor={`pv${i}`}>ซื้อจากบริษัท
+                      <input className="in" id={`pv${i}`} value={it.prev_vendor} maxLength={200} placeholder="ชื่อบริษัท" onChange={(e) => setItem(i, { prev_vendor: e.target.value })} />
+                    </label>
+                    <label className="f" htmlFor={`pd${i}`}>เมื่อ (วันที่)
+                      <input className="in" type="date" id={`pd${i}`} value={it.prev_date} onChange={(e) => setItem(i, { prev_date: e.target.value })} />
+                    </label>
                   </div>
                   <div className="item-info" aria-live="polite">
                     {!key ? <span className="note">กรอก SKU แล้วชื่อสินค้าจะขึ้นมาเอง · Enter a SKU</span>
@@ -700,6 +717,14 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
                       <td key={ci} className="num" style={{ textAlign: 'right', fontWeight: 600, color: !x.complete ? 'var(--muted)' : x.diff >= 0 ? 'var(--sage-ink)' : 'var(--bad)' }}>
                         {!x.complete ? 'กรอกให้ครบ' : x.diff >= 0 ? `สูงกว่า +${fmt(x.diff)}` : `ต่ำกว่า −${fmt(-x.diff)}`}
                       </td>
+                    ))}
+                  </tr>
+                  <tr>
+                    <td colSpan={3}>การรับประกัน · Warranty</td>
+                    <td className="sel" style={{ textAlign: 'right' }}>{d.warranty.trim() || '—'}</td>
+                    {d.comps.map((x, ci) => (
+                      <td key={ci}><input className="in" id={`cw${ci}`} aria-label={`การรับประกัน ${x.vendor || `คู่เทียบ ${ci + 1}`}`} value={x.warranty} maxLength={200} placeholder="เช่น 1 ปี"
+                        onChange={(e) => setComp(ci, { warranty: e.target.value })} /></td>
                     ))}
                   </tr>
                   <tr>

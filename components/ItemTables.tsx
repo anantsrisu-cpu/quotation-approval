@@ -1,6 +1,6 @@
 'use client';
 import { compDiscounts, compNets, compPrices, daysText, itemsOf, netOf, normDiscount } from '@/lib/calc';
-import { fmt, fmtQty, r2 } from '@/lib/format';
+import { dOnly, fmt, fmtQty, r2 } from '@/lib/format';
 import type { RequestRow } from '@/lib/types';
 
 const R = { textAlign: 'right' as const };
@@ -46,13 +46,17 @@ export function ItemsTable({ r }: { r: RequestRow }) {
                 <td className="note">{i + 1}</td>
                 <td>
                   <span className="mono" style={{ fontSize: 12 }}>{it.sku}</span> · {it.product_name || '—'}
+                  {it.brand && <span className="chip st-draft" style={{ marginLeft: 6 }}>{it.brand}</span>}
                   {it.description && <div className="note" style={{ whiteSpace: 'pre-wrap', color: 'var(--ink-2)' }}>{it.description}</div>}
                 </td>
                 <td className="num" style={{ ...R, whiteSpace: 'nowrap' }}>{fmtQty(it.qty)} {it.unit}</td>
                 <td className="num" style={R}>{fmt(it.unit_price)}</td>
                 {hasDisc && <td className="num" style={R}>{normDiscount(it.discount) || '—'}</td>}
                 {hasDisc && <td className="num" style={R}><b>{fmt(net)}</b></td>}
-                <td className="num" style={R}>{it.prev_price != null ? fmt(it.prev_price) : <span className="note">—</span>}</td>
+                <td className="num" style={R}>
+                  {it.prev_price != null ? fmt(it.prev_price) : <span className="note">—</span>}
+                  {(it.prev_vendor || it.prev_date) && <div className="note" style={{ whiteSpace: 'normal' }}>{[it.prev_vendor, it.prev_date ? dOnly(it.prev_date) : ''].filter(Boolean).join(' · ')}</div>}
+                </td>
                 <td style={R}><PrevPct pct={pct} /></td>
                 <td className="num" style={R}>{fmt(it.line_total ?? r2(net * it.qty))}</td>
               </tr>
@@ -121,6 +125,11 @@ export function CompareTable({ r }: { r: RequestRow }) {
                 {c.diff != null ? `${c.diff >= 0 ? '+' : '−'}${fmt(Math.abs(c.diff))}` : '—'}
               </td>
             ))}
+          </tr>
+          <tr>
+            <td colSpan={3}>การรับประกัน · Warranty</td>
+            <td className="sel" style={R}>{r.warranty || '—'}</td>
+            {comps.map((c, i) => <td key={i} style={R}>{c.warranty || '—'}</td>)}
           </tr>
           <tr>
             <td colSpan={3}>เครดิต · Credit</td>

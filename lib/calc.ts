@@ -10,6 +10,9 @@ export interface DraftItem {
   unit_price: string;
   discount: string;
   prev_price: string;
+  prev_vendor: string;
+  prev_date: string;
+  brand: string;
 }
 /** Comparison vendor as typed: one unit price and discount per line item, same order as the items. */
 export interface DraftComp {
@@ -18,10 +21,11 @@ export interface DraftComp {
   discounts: string[];
   credit_days: string;
   lead_days: string;
+  warranty: string;
 }
 
-export const blankItem = (unit = 'ชิ้น'): DraftItem => ({ sku: '', description: '', qty: '1', unit, unit_price: '', discount: '', prev_price: '' });
-export const blankComp = (n: number): DraftComp => ({ vendor: '', prices: Array(n).fill(''), discounts: Array(n).fill(''), credit_days: '', lead_days: '' });
+export const blankItem = (unit = 'ชิ้น'): DraftItem => ({ sku: '', description: '', qty: '1', unit, unit_price: '', discount: '', prev_price: '', prev_vendor: '', prev_date: '', brand: '' });
+export const blankComp = (n: number): DraftComp => ({ vendor: '', prices: Array(n).fill(''), discounts: Array(n).fill(''), credit_days: '', lead_days: '', warranty: '' });
 
 /** % change of the new (net) unit price against the previous price (null when there is no previous price). */
 export const prevPct = (up: number, prev: number | null | undefined) =>

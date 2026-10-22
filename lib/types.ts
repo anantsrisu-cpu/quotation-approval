@@ -26,7 +26,7 @@ export interface Settings {
   recipient: string;
   request_prefix: string;
 }
-export interface Position { code: string; th: string; en: string; sort: number }
+export interface Position { code: string; th: string; en: string; sort: number; note?: string }
 export interface Tier { id: number; label: string; max_amount: number | null; steps: string[]; sort: number }
 export interface Department { id: string; th: string; en: string; sort: number; active: boolean }
 export interface Company {
@@ -47,6 +47,10 @@ export interface LineItem {
   /** unit price after discount (filled by the server on submit) */
   net_price?: number;
   prev_price: number | null;
+  /** where the previous price came from */
+  prev_vendor?: string;
+  prev_date?: string | null;
+  brand?: string;
   line_total?: number;
   prev_diff_pct?: number | null;
 }
@@ -61,6 +65,7 @@ export interface Comparison {
   nets?: number[];
   credit_days?: number | null;
   lead_days?: number | null;
+  warranty?: string;
   /** line totals per item, filled by the server on submit */
   lines?: number[];
   /** older single-item requests */
@@ -107,6 +112,7 @@ export interface RequestRow {
   vendor: string;
   credit_days?: number | null;
   lead_days?: number | null;
+  warranty?: string;
   quote_no: string;
   quote_date: string | null;
   details: string;

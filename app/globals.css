@@ -79,11 +79,14 @@ textarea.in{padding:10px 12px;resize:vertical;min-height:72px}
 .item{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--beige);border-radius:10px;padding:12px;background:#fff}
 .item-no{flex:none;width:28px;height:28px;border-radius:50%;background:var(--soft);border:1px solid var(--beige);display:grid;place-items:center;font-weight:600;font-size:13px;margin-top:28px;font-variant-numeric:tabular-nums}
 .item-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px}
-.item-grid{display:grid;grid-template-columns:minmax(140px,1.8fr) minmax(64px,.6fr) minmax(84px,.8fr) minmax(100px,1fr) minmax(90px,.9fr) minmax(100px,1fr) minmax(100px,1fr);gap:8px}
+.item-grid{display:grid;grid-template-columns:minmax(140px,1.8fr) minmax(64px,.6fr) minmax(84px,.8fr) minmax(100px,1fr) minmax(90px,.9fr) minmax(100px,1fr);gap:8px}
 .item-grid .f{font-size:13px;white-space:nowrap}
+.item-grid2{display:grid;grid-template-columns:minmax(100px,1fr) minmax(100px,1fr) minmax(140px,1.6fr) minmax(130px,1fr);gap:8px}
+.item-grid2 .f{font-size:13px;white-space:nowrap}
+@media (max-width:640px){.item-grid2{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .item-info{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:14px;min-height:24px}
 .item-tools{flex:none;display:flex;flex-direction:column;gap:6px;margin-top:24px}
-@media (max-width:1180px){.item-grid{grid-template-columns:repeat(4,minmax(0,1fr))}.item-grid .f:first-child{grid-column:span 2}}
+@media (max-width:1180px){.item-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media (max-width:640px){.item-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.item-grid .f:first-child{grid-column:1/-1}.item{flex-wrap:wrap}.item-body{flex-basis:calc(100% - 40px)}.item-tools{flex-direction:row;margin-top:0;margin-left:38px}.item-no{margin-top:0}}
 table.cmp{min-width:0}
 table.cmp th,table.cmp td{padding:8px 10px;vertical-align:top}
@@ -160,6 +163,7 @@ table.t tr.click{cursor:pointer} table.t tr.click:hover td{background:var(--soft
 /* letter */
 .letter-wrap{overflow-x:auto;background:#E6DED6;border-radius:12px;padding:24px 12px}
 .letter-pages{display:flex;flex-direction:column;align-items:center;gap:16px}
+.sheet-host{display:flex;flex-direction:column;align-items:center;gap:16px}
 .letter{position:relative;margin:0 auto;width:794px;min-height:1123px;flex:none;background:#fff;color:#111;font-family:var(--f-doc);font-size:15px;line-height:1.5;padding:34px 70px 30px;display:flex;flex-direction:column;gap:10px;overflow:hidden}
 .letter-measure{position:fixed;left:-10000px;top:0;visibility:hidden;pointer-events:none}
 .letter-measure .letter{min-height:0}
