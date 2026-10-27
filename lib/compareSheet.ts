@@ -44,6 +44,8 @@ export interface SheetSigner {
   date: string;
   signature?: string | null;
   note?: string; // อนุมัติแทน … / จัดทำแทนโดย …
+  /** skip = not needed for this amount (crossed out) · wet = signs by hand on the printout */
+  state?: 'skip' | 'wet';
 }
 export interface SheetData {
   logoUrl?: string | null;
@@ -107,10 +109,13 @@ const CSS = `
 .cs-foot td.lbl{text-align:center;font-size:9.5px;font-weight:600}
 .cs-foot td.blank{background:#fff}
 .cs-bottom{display:flex;border:1px solid #333;border-top:none}
-.cs-notes{flex:1;min-width:0;padding:3px 6px;font-size:9.5px}
+.cs-notes{flex:1 1 220px;min-width:200px;padding:3px 6px;font-size:9.5px}
 .cs-notes u{font-weight:600}
 .cs-notes .ln{border-bottom:1px solid #bbb;min-height:15px;padding-top:2px;white-space:pre-wrap}
-.cs-sig{width:168px;border-left:1px solid #333;display:flex;flex-direction:column;text-align:center;font-size:9.5px}
+.cs-sig{flex:0 1 168px;min-width:0;border-left:1px solid #333;display:flex;flex-direction:column;text-align:center;font-size:9.5px;position:relative}
+.cs-sig .x{position:absolute;left:0;top:48px;width:100%;height:calc(100% - 48px);pointer-events:none;display:block}
+.cs-sig.skip .b{color:#777}
+.cs-sig .wet{color:#555;font-size:.92em}
 .cs-sig .h{border-bottom:1px solid #333;padding:3px 2px;height:48px;overflow:hidden;line-height:1.3;font-size:9px}
 .cs-sig .h b{font-weight:600}
 .cs-sig .b{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;padding:2px 4px 4px;gap:1px}
@@ -214,9 +219,13 @@ function bottomHtml(d: SheetData) {
   return `<div class="cs-bottom"><div class="cs-notes"><u>หมายเหตุ</u>${lines.map((l) => `<div class="ln">${esc(l)}</div>`).join('')}</div>
 ${d.signers
   .map(
-    (s) => `<div class="cs-sig"><div class="h"><b>${esc(s.heading)}</b>${s.range ? `<br>${esc(s.range)}` : ''}<br>${esc(s.caption)}</div>
+    (s) => `<div class="cs-sig${s.state === 'skip' ? ' skip' : ''}"><div class="h"><b>${esc(s.heading)}</b>${s.range ? `<br>${esc(s.range)}` : ''}<br>${esc(s.caption)}${s.state === 'wet' ? ' <span class="wet">· ลายเซ็นสด</span>' : ''}</div>
 <div class="b">${s.signature ? `<img src="${esc(s.signature)}" alt="ลายเซ็น">` : '<span class="ph"></span>'}<span>(${esc(s.name || '..........................')})</span>
-<span>${esc(s.position)}</span>${s.note ? `<span style="font-size:.9em">${esc(s.note)}</span>` : ''}<span>วันที่ ${esc(s.date || '____________')}</span></div></div>`,
+<span>${esc(s.position)}</span>${s.note ? `<span style="font-size:.9em">${esc(s.note)}</span>` : ''}${s.state === 'skip' ? '<span style="font-size:.9em">ไม่ต้องลงนามในวงเงินนี้</span>' : `<span>วันที่ ${esc(s.date || '____________')}</span>`}</div>${
+      s.state === 'skip'
+        ? '<canvas class="x" aria-hidden="true"></canvas>'
+        : ''
+    }</div>`,
   )
   .join('')}</div>`;
 }
@@ -299,5 +308,23 @@ export async function renderSheet(host: HTMLElement, d: SheetData): Promise<numb
       return `<article class="cs-page sheet" aria-label="ตารางเปรียบเทียบราคา หน้า ${p + 1}">${d.draft ? '<span class="cs-wm" aria-hidden="true">ร่าง · DRAFT</span>' : ''}${headerHtml(d, p + 1, total)}${mainTable(d, L, rows, isLast, fillH)}${isLast ? bottomHtml(d) : ''}</article>`;
     })
     .join('');
+  // cross out the boxes of approvers not needed for this amount (drawn on a canvas so the PDF matches the screen)
+  host.querySelectorAll<HTMLCanvasElement>('.cs-sig.skip canvas.x').forEach((c) => {
+    const w = c.offsetWidth;
+    const h = c.offsetHeight;
+    c.width = w * 2;
+    c.height = h * 2;
+    const g = c.getContext('2d');
+    if (!g) return;
+    g.scale(2, 2);
+    g.strokeStyle = '#111';
+    g.lineWidth = 1;
+    g.beginPath();
+    g.moveTo(0, 0);
+    g.lineTo(w, h);
+    g.moveTo(w, 0);
+    g.lineTo(0, h);
+    g.stroke();
+  });
   return total;
 }

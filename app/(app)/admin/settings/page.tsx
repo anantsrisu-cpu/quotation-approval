@@ -29,7 +29,7 @@ function General() {
   }
   return (
     <div className="card">
-      <div className="actions"><h2>หนังสืออนุมัติและค่าทั่วไป · Letter & general</h2><button className="btn p sm" onClick={save}>บันทึก · Save</button></div>
+      <div className="actions"><h2>ค่าทั่วไป · General</h2><button className="btn p sm" onClick={save}>บันทึก · Save</button></div>
       <div className="grid">
         <label className="f">VAT (%)<input className="in r" inputMode="decimal" value={vat} onChange={(e) => setVat(e.target.value)} /></label>
         <label className="f">รหัสนำหน้าเลขที่ · Number prefix<input className="in mono" value={prefix} onChange={(e) => setPrefix(e.target.value)} /><span className="note" style={{ fontWeight: 400 }}>เช่น {prefix || 'QT'}-{new Date().getFullYear()}-0001</span></label>
@@ -48,7 +48,7 @@ function Positions() {
       if (!p.code || !p.th.trim()) return toast('bad', 'กรอกรหัสและชื่อตำแหน่งให้ครบ · Code and Thai name required', '');
       if (!/^[a-z0-9_]{1,20}$/.test(p.code)) return toast('bad', 'รหัสตำแหน่งใช้ a–z 0–9 _ · Code: a–z, 0–9, _', p.code);
     }
-    const { ok } = await run('save-positions', sb.from('positions').upsert(rows.map(({ code, th, en, sort, note }) => ({ code, th: th.trim(), en: en.trim(), sort: Number(sort) || 0, note: (note || '').trim() }))));
+    const { ok } = await run('save-positions', sb.from('positions').upsert(rows.map(({ code, th, en, sort, note, sign_mode }) => ({ code, th: th.trim(), en: en.trim(), sort: Number(sort) || 0, note: (note || '').trim(), sign_mode: sign_mode || 'online' }))));
     if (ok) { toast('ok', 'บันทึกตำแหน่งแล้ว · Positions saved', ''); reloadRefs(); }
   }
   async function remove(code: string) {
@@ -59,17 +59,24 @@ function Positions() {
     <div className="card">
       <div className="actions"><h2>ตำแหน่งผู้อนุมัติ · Approver positions</h2>
         <div className="row" style={{ gap: 8 }}>
-          <button className="btn sm" onClick={() => setRows([...rows, { code: '', th: '', en: '', sort: (rows.at(-1)?.sort || 0) + 10, note: '', isNew: true }])}>+ เพิ่ม · Add</button>
+          <button className="btn sm" onClick={() => setRows([...rows, { code: '', th: '', en: '', sort: (rows.at(-1)?.sort || 0) + 10, note: '', sign_mode: 'online', isNew: true }])}>+ เพิ่ม · Add</button>
           <button className="btn p sm" onClick={save}>บันทึก · Save</button>
         </div>
       </div>
       <span className="note">ลำดับการอนุมัติเรียงตาม “ลำดับ” น้อยไปมาก · Approvals happen in ascending order. ผู้อนุมัติในฝ่ายเดียวกับคำขอจะถูกเลือกก่อน · An approver from the request&apos;s department is chosen first.</span>
+      <span className="note">ตารางเปรียบเทียบแสดงกรอบ “ผู้อนุมัติ (1), (2), …” ทุกตำแหน่งตามลำดับนี้ · ตำแหน่งที่วงเงินไม่ถึงจะถูกขีดฆ่าเมื่ออนุมัติครบ · ตำแหน่ง “ลายเซ็นสด” ไม่ต้องอนุมัติในระบบ (การอนุมัติออนไลน์จบที่ตำแหน่งก่อนหน้า) และเว้นกรอบไว้ให้เซ็นบนกระดาษที่พิมพ์ · Every position gets a signature box; unused ones are crossed out; hand-signed positions sign the printout.</span>
       {rows.map((p, i) => (
         <div key={i} className="row" style={{ gap: 10, alignItems: 'flex-end', border: '1px solid var(--beige)', borderRadius: 10, padding: 10 }}>
           <label className="f" style={{ flex: '1 1 110px' }}>รหัส · Code<input className="in mono" value={p.code} disabled={!p.isNew} onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, code: e.target.value.toLowerCase() } : x)))} /></label>
           <label className="f" style={{ flex: '3 1 200px' }}>ชื่อ (ไทย)<input className="in" value={p.th} onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, th: e.target.value } : x)))} /></label>
           <label className="f" style={{ flex: '3 1 200px' }}>ชื่อ (อังกฤษ)<input className="in" value={p.en} onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, en: e.target.value } : x)))} /></label>
           <label className="f" style={{ flex: '3 1 220px' }}>ช่วงวงเงิน (แสดงในตารางเปรียบเทียบ)<input className="in" value={p.note || ''} maxLength={120} placeholder="เช่น (มูลค่า 1 - 1,000,000 บาท)" onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, note: e.target.value } : x)))} /></label>
+          <label className="f" style={{ flex: '2 1 190px' }}>วิธีลงนาม
+            <select className="in" value={p.sign_mode || 'online'} onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, sign_mode: e.target.value as 'online' | 'wet' } : x)))}>
+              <option value="online">ลงนามในระบบ (อนุมัติออนไลน์)</option>
+              <option value="wet">ลายเซ็นสด (เซ็นบนกระดาษ)</option>
+            </select>
+          </label>
           <label className="f" style={{ flex: '1 1 80px' }}>ลำดับ<input className="in r" inputMode="numeric" value={p.sort} onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, sort: Number(e.target.value) || 0 } : x)))} /></label>
           {p.isNew ? <button className="icon-btn" onClick={() => setRows(rows.filter((_, j) => j !== i))} aria-label="ลบ">✕</button>
             : <button className="btn sm d" onClick={() => remove(p.code)} title="ลบได้เมื่อไม่มีผู้ใช้หรือคำขอใช้ตำแหน่งนี้">ลบ</button>}
@@ -157,7 +164,7 @@ function Departments() {
           <button className="btn p sm" onClick={save}>บันทึก · Save</button>
         </div>
       </div>
-      <span className="note">ใช้ในหัวเรื่องและย่อหน้า “ตามที่ …” ของหนังสืออนุมัติ · Used in the letter subject and first paragraph. ปิดใช้งานแทนการลบ · Deactivate instead of deleting.</span>
+      <span className="note">แสดงเป็น “ฝ่ายที่ขอซื้อ” ในหัวตารางเปรียบเทียบ · Shown on the comparison sheet header. ปิดใช้งานแทนการลบ · Deactivate instead of deleting.</span>
       {rows.map((d, i) => (
         <div key={i} className="row" style={{ gap: 10, alignItems: 'flex-end', border: '1px solid var(--beige)', borderRadius: 10, padding: 10 }}>
           <label className="f" style={{ flex: '1 1 120px' }}>รหัส · Code<input className="in mono" value={d.id} disabled={!d.isNew} placeholder="e.g. sales" onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, id: e.target.value } : x)))} /></label>
@@ -211,7 +218,7 @@ function Companies() {
           <button className="btn p sm" onClick={save}>บันทึก · Save</button>
         </div>
       </div>
-      <span className="note">ชื่อและโลโก้บนหนังสืออนุมัติเปลี่ยนตามบริษัทที่ผู้จัดทำเลือก · The letterhead follows the buyer company chosen on each request.</span>
+      <span className="note">บริษัทที่เปิดใช้งานแสดงเป็นช่องติ๊กในหัวตารางเปรียบเทียบ บริษัทผู้ซื้อของคำขอถูกติ๊ก ✓ และใช้โลโก้ของบริษัทนั้น · Active companies appear as tick boxes on the sheet; the buyer company is ticked and its logo used.</span>
       {rows.map((c, i) => {
         const url = logoUrl(c);
         return (

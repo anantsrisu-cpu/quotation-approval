@@ -27,7 +27,7 @@ export default function ProfilePage() {
       setSig(data);
       setPending(null);
       pad.current?.clear();
-      toast('ok', 'บันทึกลายเซ็นแล้ว · Signature saved', 'จะใช้ในหนังสืออนุมัติครั้งถัดไป · Used on your next approvals');
+      toast('ok', 'บันทึกลายเซ็นแล้ว · Signature saved', 'จะใช้ในตารางเปรียบเทียบราคาครั้งถัดไป · Used on your next approvals');
     }
   }
 

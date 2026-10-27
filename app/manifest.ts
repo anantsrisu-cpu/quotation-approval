@@ -6,7 +6,7 @@ export default function manifest(): MetadataRoute.Manifest {
     id: '/',
     name: 'ระบบอนุมัติใบเสนอราคา · Quotation Approval',
     short_name: 'อนุมัติราคา',
-    description: 'ขออนุมัติใบเสนอราคา อนุมัติและลงนาม และดาวน์โหลดหนังสืออนุมัติ PDF',
+    description: 'ขออนุมัติใบเสนอราคา อนุมัติและลงนาม และดาวน์โหลด PDF ตารางเปรียบเทียบราคา',
     lang: 'th',
     start_url: '/',
     scope: '/',

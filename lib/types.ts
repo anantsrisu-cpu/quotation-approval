@@ -26,7 +26,9 @@ export interface Settings {
   recipient: string;
   request_prefix: string;
 }
-export interface Position { code: string; th: string; en: string; sort: number; note?: string }
+export interface Position { code: string; th: string; en: string; sort: number; note?: string; sign_mode?: 'online' | 'wet' }
+/** One approver position on the comparison sheet, saved when the request is sent. */
+export interface SignPlanEntry { position: string; mode: 'online' | 'wet' | 'skip'; step_no?: number; approver_id?: string | null }
 export interface Tier { id: number; label: string; max_amount: number | null; steps: string[]; sort: number }
 export interface Department { id: string; th: string; en: string; sort: number; active: boolean }
 export interface Company {
@@ -117,6 +119,7 @@ export interface RequestRow {
   quote_date: string | null;
   details: string;
   items: LineItem[];
+  sign_plan?: SignPlanEntry[] | null;
   comparisons: Comparison[];
   no_comp: boolean;
   no_comp_reason: string;
@@ -163,5 +166,5 @@ export interface UserInvite {
 
 export interface ApproverPreview {
   step_no: number; pos: string; pos_th: string; approver_id: string | null;
-  approver_name: string | null; has_signature: boolean; tier_label: string;
+  approver_name: string | null; has_signature: boolean; tier_label: string; sign_mode?: 'online' | 'wet';
 }

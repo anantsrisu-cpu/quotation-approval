@@ -3,7 +3,7 @@ import { useEffect, useLayoutEffect, useRef } from 'react';
 import { useApp } from './AppProvider';
 import { compDiscounts, compNets, compPrices, itemsOf, netOf, normDiscount } from '@/lib/calc';
 import { dOnly, r2 } from '@/lib/format';
-import { renderSheet, type SheetData, type SheetVendor } from '@/lib/compareSheet';
+import { renderSheet, type SheetData, type SheetSigner, type SheetVendor } from '@/lib/compareSheet';
 import type { RequestRow, RequestStep } from '@/lib/types';
 
 /** Turn a request into the data of the landscape comparison sheet. */
@@ -51,8 +51,8 @@ export function useSheetData(r: RequestRow, steps: RequestStep[], draft: boolean
   const ordered = [...steps].sort((a, b) => a.step_no - b.step_no);
   const note = (code: string) => positions.find((p) => p.code === code)?.note || '';
   const prep = people[r.preparer_id];
-  const approvers = ordered.map((s, i) => ({
-    heading: `ผู้อนุมัติ (${i + 1})`,
+  const stepBox = (s: RequestStep, heading: string): SheetSigner => ({
+    heading,
     range: note(s.position),
     caption: 'Approved by',
     name: name(s.signer_id || s.approver_id),
@@ -60,7 +60,27 @@ export function useSheetData(r: RequestRow, steps: RequestStep[], draft: boolean
     date: s.status === 'approved' ? dOnly(s.acted_at) : '',
     signature: s.status === 'approved' ? s.signature : null,
     note: s.on_behalf_of ? `อนุมัติแทน ${name(s.on_behalf_of)}` : '',
-  }));
+  });
+  // one box per approver position (from the plan saved at sending); older requests: one per step
+  const plan = r.sign_plan && r.sign_plan.length ? r.sign_plan : null;
+  const approvers: SheetSigner[] = plan
+    ? plan.map((e, i) => {
+        const heading = `ผู้อนุมัติ (${i + 1})`;
+        const st = e.mode === 'online' ? ordered.find((s) => s.step_no === e.step_no) : undefined;
+        if (st) return stepBox(st, heading);
+        return {
+          heading,
+          range: note(e.position),
+          caption: 'Approved by',
+          name: e.mode === 'wet' && e.approver_id ? name(e.approver_id) : '',
+          position: posTh(e.position),
+          date: '',
+          signature: null,
+          // not needed for this amount: crossed out once the request is fully approved
+          state: e.mode === 'wet' ? 'wet' : e.mode === 'skip' && r.status === 'approved' ? 'skip' : undefined,
+        };
+      })
+    : ordered.map((s, i) => stepBox(s, `ผู้อนุมัติ (${i + 1})`));
   const notes: string[] = [];
   if (r.details?.trim()) notes.push(`วัตถุประสงค์ / รายละเอียด: ${r.details.trim()}`);
   if (r.no_comp) notes.push(`ไม่มีคู่เทียบ เหตุผล: ${r.no_comp_reason}`);

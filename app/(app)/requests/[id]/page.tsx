@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useApp } from '@/components/AppProvider';
-import { CoverLetter } from '@/components/CoverLetter';
+import { ApprovalDoc } from '@/components/ApprovalDoc';
 import { SignaturePad, type PadHandle } from '@/components/SignaturePad';
 import { Chain, Chip, Loading, Modal } from '@/components/ui';
 import { PURP, SUBJ, dt, fileSize, fmt } from '@/lib/format';
@@ -133,7 +133,7 @@ export default function RequestDetail() {
     const { ok, data } = await run<{ done: boolean; next?: string; step?: number }>('approve_request', sb.rpc('approve_request', { p_id: id, p_comment: comment }));
     setBusy(null);
     if (ok && data) {
-      toast('ok', 'อนุมัติและลงนามสำเร็จ · Approved & signed', data.done ? 'อนุมัติครบ กำลังสร้างหนังสืออนุมัติ PDF · Fully approved, creating the PDF letter' : `ส่งต่อถึง ${data.next} (ขั้นที่ ${data.step})`);
+      toast('ok', 'อนุมัติและลงนามสำเร็จ · Approved & signed', data.done ? 'อนุมัติครบ กำลังสร้าง PDF ตารางเปรียบเทียบราคา · Fully approved, creating the PDF' : `ส่งต่อถึง ${data.next} (ขั้นที่ ${data.step})`);
       setComment('');
       setConfirm(false);
       app.refresh();
@@ -208,17 +208,17 @@ export default function RequestDetail() {
           {(isPrep || has('admin')) && (r.status === 'pending' || r.status === 'draft') && (
             <button className="btn d" onClick={() => { setReason(''); setModal('cancel'); }}>ยกเลิกคำขอ · Cancel</button>
           )}
-          {r.status === 'approved' && r.letter_path && <button className="btn p" onClick={downloadPdf}>ดาวน์โหลดหนังสืออนุมัติ PDF · Download PDF</button>}
+          {r.status === 'approved' && r.letter_path && <button className="btn p" onClick={downloadPdf}>ดาวน์โหลด PDF ตารางเปรียบเทียบราคา · Download PDF</button>}
         </div>
       </div>
 
       {r.status === 'approved' && (
         r.letter_path ? (
-          <div className="ok-box">✓ อนุมัติครบทุกขั้นแล้ว หนังสืออนุมัติบันทึกเป็น PDF เรียบร้อย กระบวนการเสร็จสิ้น · Fully approved; the letter is saved as PDF and the request is complete.</div>
+          <div className="ok-box">✓ อนุมัติครบทุกขั้นแล้ว ตารางเปรียบเทียบราคาบันทึกเป็น PDF เรียบร้อย กระบวนการเสร็จสิ้น · Fully approved; the sheet is saved as PDF and the request is complete.</div>
         ) : pdfState === 'failed' ? (
           <div className="bad-box">สร้าง PDF ไม่สำเร็จ ระบบแจ้งผู้ดูแลแล้ว · Could not create the PDF (admin notified). <button className="btn sm" onClick={makePdf}>ลองอีกครั้ง · Try again</button></div>
         ) : (
-          <div className="warn-box">{pdfState === 'making' ? 'กำลังสร้างหนังสืออนุมัติ PDF… · Creating the PDF letter…' : 'อนุมัติครบแล้ว รอสร้าง PDF · Approved; PDF not created yet'} {involved && pdfState !== 'making' && <button className="btn sm" onClick={makePdf}>สร้าง PDF · Create PDF</button>}</div>
+          <div className="warn-box">{pdfState === 'making' ? 'กำลังสร้าง PDF… · Creating the PDF…' : 'อนุมัติครบแล้ว รอสร้าง PDF · Approved; PDF not created yet'} {involved && pdfState !== 'making' && <button className="btn sm" onClick={makePdf}>สร้าง PDF · Create PDF</button>}</div>
         )
       )}
       {r.status === 'rejected' && <div className="bad-box">ไม่อนุมัติ โดย {name(rejectedStep?.signer_id)} · Rejected — “{rejectedStep?.comment}”</div>}
@@ -310,7 +310,7 @@ export default function RequestDetail() {
               </div>
               <label className="check" htmlFor="rv-confirm">
                 <input type="checkbox" id="rv-confirm" checked={confirm} onChange={(e) => setConfirm(e.target.checked)} />
-                ข้าพเจ้ายืนยันการอนุมัติและยินยอมให้ใช้ลายเซ็นในหนังสืออนุมัติ · I confirm and allow my signature on the letter
+                ข้าพเจ้ายืนยันการอนุมัติและยินยอมให้ใช้ลายเซ็นในตารางเปรียบเทียบราคา · I confirm and allow my signature on the sheet
               </label>
               <div className="row" style={{ gap: 10 }}>
                 <button className="btn d" style={{ flex: '1 1 120px' }} disabled={!!busy} onClick={reject}>{busy === 'reject' ? '…' : 'ไม่อนุมัติ · Reject'}</button>
@@ -356,14 +356,14 @@ export default function RequestDetail() {
 
       <div className="card">
         <div className="actions">
-          <h2>หนังสืออนุมัติใบเสนอราคา · Approval letter</h2>
+          <h2>ตารางเปรียบเทียบราคา · Comparison sheet</h2>
           {r.status === 'approved' && r.letter_path && <button className="btn p sm" onClick={downloadPdf}>ดาวน์โหลด PDF · Download PDF</button>}
         </div>
         <span className="note">
           {r.status === 'approved' ? 'อนุมัติครบแล้ว เอกสารล็อก แก้ไขไม่ได้ บันทึกเป็น PDF เท่านั้น · Locked; saved as PDF only' : 'ยังไม่อนุมัติครบ แสดงเป็นร่าง · Not fully approved — shown as draft'}
         </span>
         <div className="letter-wrap">
-          <CoverLetter ref={letterRef} r={r} steps={steps} draft={r.status !== 'approved'} rev={log.filter((l) => l.kind === 'reopened').length} />
+          <ApprovalDoc ref={letterRef} r={r} steps={steps} draft={r.status !== 'approved'} rev={log.filter((l) => l.kind === 'reopened').length} />
         </div>
       </div>
 

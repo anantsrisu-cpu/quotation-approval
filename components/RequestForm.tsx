@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useApp } from './AppProvider';
-import { CoverLetter } from './CoverLetter';
+import { ApprovalDoc } from './ApprovalDoc';
 import { Loading, Modal, PageHead } from './ui';
 import { blankComp, blankItem, calcItems, compDiscounts, compPrices, itemsOf, parseDays, type DraftComp, type DraftItem } from '@/lib/calc';
 import { PURP, SUBJ, SUBJ_EN, UNITS, fileSize, fmt, num } from '@/lib/format';
@@ -75,7 +75,7 @@ function parsePasted(text: string): DraftItem[] {
 
 export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string | null; copyFrom?: string | null; forUser?: string | null }) {
   const app = useApp();
-  const { sb, me, settings, departments, companies, people, run, toast, deptTh, has, name } = app;
+  const { sb, me, settings, departments, companies, people, positions, run, toast, deptTh, has, name } = app;
   const router = useRouter();
   const vatRate = settings?.vat_rate ?? 0.07;
   const isAdmin = has('admin');
@@ -268,7 +268,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
     if (!c.lowest && !d.low_reason.trim()) missing.push('ระบุเหตุผลที่ไม่เลือกราคาต่ำสุด · Explain why not the lowest price');
   }
   if (!files.length) missing.push('แนบใบเสนอราคาอย่างน้อย 1 ไฟล์ · Attach at least one quotation file');
-  approvers.forEach((a) => {
+  approvers.filter((a) => a.sign_mode !== 'wet').forEach((a) => {
     if (!a.approver_id) missing.push(`ยังไม่มีผู้อนุมัติตำแหน่ง ${a.pos_th} ในระบบ แจ้งผู้ดูแล · No approver set up for ${a.pos_th}`);
   });
 
@@ -376,10 +376,10 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
       setBusy(null);
       return;
     }
-    const { ok, data } = await run<{ no: string; steps: number; first_approver: string }>('submit_request', sb.rpc('submit_request', { p_id: rid, p_message: message }));
+    const { ok, data } = await run<{ no: string; steps: number; first_approver: string | null; done?: boolean }>('submit_request', sb.rpc('submit_request', { p_id: rid, p_message: message }));
     setBusy(null);
     if (ok && data) {
-      toast('ok', 'ส่งขออนุมัติสำเร็จ · Request sent', `${data.no} ส่งถึง ${data.first_approver} (ขั้นที่ 1 จาก ${data.steps})`);
+      toast('ok', 'ส่งขออนุมัติสำเร็จ · Request sent', data.done ? `${data.no} ผู้อนุมัติวงเงินนี้ใช้ลายเซ็นสด ดาวน์โหลด PDF ไปลงนามได้เลย` : `${data.no} ส่งถึง ${data.first_approver} (ขั้นที่ 1 จาก ${data.steps})`);
       app.refresh();
       router.push(`/requests/${rid}`);
     } else setModal(null);
@@ -397,6 +397,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
     }
   }
 
+  const online = approvers.filter((a) => a.sign_mode !== 'wet');
   const previewRow: RequestRow = {
     id: id || 'draft', no, status: 'draft', preparer_id: d.preparer_id || me.id, created_by: me.id, subject_type: d.subject_type,
     items: rowItems().map((it, i) => ({ ...it, product_name: it.product_name || '[ชื่อสินค้า]', net_price: c.lines[i].net, line_total: c.lines[i].line, prev_diff_pct: c.lines[i].pct })),
@@ -411,10 +412,16 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
       credit_days: parseDays(d.comps[ci].credit_days).days, lead_days: parseDays(d.comps[ci].lead_days).days, warranty: d.comps[ci].warranty,
     })),
     no_comp: d.no_comp, no_comp_reason: d.no_comp_reason, low_reason: c.lowest ? '' : d.low_reason, message,
+    sign_plan: [...positions].sort((a, b) => a.sort - b.sort).map((p) => {
+      const a = approvers.find((x) => x.pos === p.code);
+      if (!a) return { position: p.code, mode: 'skip' as const };
+      if (a.sign_mode === 'wet') return { position: p.code, mode: 'wet' as const, approver_id: a.approver_id };
+      return { position: p.code, mode: 'online' as const, step_no: online.indexOf(a) };
+    }),
     tier_label: approvers[0]?.tier_label || '', current_step: 0, preparer_signature: null, created_at: new Date().toISOString(),
     submitted_at: null, step_since: null, completed_at: null, letter_path: null, letter_at: null,
   };
-  const previewSteps: RequestStep[] = approvers.map((a) => ({ step_no: a.step_no, position: a.pos, approver_id: a.approver_id, status: 'waiting' }));
+  const previewSteps: RequestStep[] = online.map((a, i) => ({ step_no: i, position: a.pos, approver_id: a.approver_id, status: 'waiting' }));
   const activePeople = Object.values(people).filter((p) => p.status === 'active');
 
   /** Pasting a column of numbers into one price cell fills the cells below it. */
@@ -442,7 +449,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
                 <option value="">— เลือกผู้จัดทำ · Select —</option>
                 {preparers.map((p) => <option key={p.id} value={p.id}>{p.id === me.id ? `ตัวฉันเอง · Myself (${p.name || p.email})` : `${p.name || p.email} · ${deptTh(p.dept)}`}</option>)}
               </select>
-              {proxy && d.preparer_id && <span className="note">หนังสืออนุมัติจะแสดง &quot;{name(d.preparer_id)}&quot; เป็นผู้จัดทำ พร้อมหมายเหตุ &quot;จัดทำแทนโดย {me.name}&quot; · The letter shows the real preparer and notes you prepared it</span>}
+              {proxy && d.preparer_id && <span className="note">ตารางเปรียบเทียบจะแสดง &quot;{name(d.preparer_id)}&quot; เป็นผู้จัดทำ พร้อมหมายเหตุ &quot;จัดทำแทนโดย {me.name}&quot; · The letter shows the real preparer and notes you prepared it</span>}
             </label>
           </div>
         )}
@@ -496,7 +503,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
               <option value="">— เลือก · Select —</option>
               {companies.filter((x) => x.active || x.id === d.company_id).map((x) => <option key={x.id} value={x.id}>{x.th}</option>)}
             </select>
-            <span className="note" style={{ fontWeight: 400 }}>ชื่อและโลโก้บริษัทนี้เป็นหัวหนังสืออนุมัติ · Heads the approval letter</span>
+            <span className="note" style={{ fontWeight: 400 }}>บริษัทนี้ถูกติ๊ก ✓ และใช้โลโก้ในหัวตารางเปรียบเทียบ · Ticked and its logo used on the sheet</span>
           </label>
           <label className="f span2" htmlFor="f-details">วัตถุประสงค์ / รายละเอียด · Details
             <textarea className="in" id="f-details" value={d.details} onChange={(e) => set('details', e.target.value)} />
@@ -620,16 +627,17 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
               <li key={a.step_no} style={{ background: '#fff', border: '1px solid var(--beige)', borderRadius: 10, padding: '10px 12px', display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
                 <span className="dot ok" style={{ width: 26, height: 26, background: 'var(--brown)' }}>{i + 1}</span>
                 <span style={{ flex: '999 1 200px' }}>
-                  <b>{a.approver_name || <span style={{ color: 'var(--bad)' }}>ยังไม่มีผู้อนุมัติ · Not set up</span>}</b>
+                  <b>{a.approver_name || <span style={{ color: a.sign_mode === 'wet' ? 'var(--muted)' : 'var(--bad)' }}>{a.sign_mode === 'wet' ? 'เว้นชื่อไว้ให้เขียน' : 'ยังไม่มีผู้อนุมัติ · Not set up'}</span>}</b>
                   <div className="note">{a.pos_th}</div>
                 </span>
-                {a.approver_id && (a.has_signature
+                {a.sign_mode === 'wet' ? <span className="chip st-pend">ลายเซ็นสด · เซ็นบนกระดาษหลังพิมพ์</span>
+                  : a.approver_id && (a.has_signature
                   ? <span className="note" style={{ color: 'var(--sage-ink)' }}>✓ มีลายเซ็น · Signature on file</span>
                   : <span className="note" style={{ color: 'var(--bad)' }}>ยังไม่มีลายเซ็น · No signature yet</span>)}
               </li>
             ))}
           </ol>
-          <span className="note">อนุมัติตามลำดับ กำหนดโดยกฎวงเงิน · Approved in order; set by the admin&apos;s price-tier rules</span>
+          <span className="note">อนุมัติตามลำดับ กำหนดโดยกฎวงเงิน · ตำแหน่งที่เป็นลายเซ็นสดไม่ต้องอนุมัติในระบบ การอนุมัติออนไลน์จบที่ตำแหน่งก่อนหน้า · Hand-signed positions sign the printout instead</span>
         </div>
 
         <h2>คู่เทียบราคา · Price comparison <span className="req">*</span></h2>
@@ -776,12 +784,6 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
           </ul>
         )}
 
-        <div className="box">
-          <b style={{ fontSize: 13 }}>ตัวอย่างในหนังสืออนุมัติ · In the approval letter</b>
-          <div style={{ fontSize: 14 }}><b>เรื่อง:</b> ขออนุมัติ{SUBJ[d.subject_type]} {summaryName} {deptTh(d.dept)}</div>
-          <div style={{ fontSize: 14 }}>ตามที่ {deptTh(d.dept)} ได้เสนอขออนุมัติ{SUBJ[d.subject_type]} {n > 1 ? `จำนวน ${n} รายการ` : `${firstName} จำนวน ${d.items[0].qty} ${d.items[0].unit}`} เพื่อ{PURP[d.purpose]} จาก {d.vendor || '[ผู้ขาย]'}…</div>
-        </div>
-
         {tried && missing.length > 0 && (
           <div className="bad-box" role="alert">
             <b>ยังไปขั้นถัดไปไม่ได้ · Can&apos;t continue yet</b>
@@ -811,8 +813,8 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
       </form>
 
       {modal === 'preview' && (
-        <Modal title="ตัวอย่างร่างหนังสืออนุมัติ · Draft preview" onClose={() => setModal(null)} wide>
-          <div className="letter-wrap"><CoverLetter r={previewRow} steps={previewSteps} draft /></div>
+        <Modal title="ตัวอย่างร่างตารางเปรียบเทียบราคา · Draft preview" onClose={() => setModal(null)} wide>
+          <div className="letter-wrap"><ApprovalDoc r={previewRow} steps={previewSteps} draft /></div>
           <span className="note">ยังแก้ไขได้ หนังสือจริงจะสร้างและล็อกเมื่ออนุมัติครบ · Still editable; the real letter is locked after final approval</span>
         </Modal>
       )}
@@ -825,7 +827,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
             <div className="num">ยอดรวม {fmt(c.total)} บาท · {approvers[0]?.tier_label}</div>
           </div>
           <ol style={{ margin: 0, paddingLeft: 20 }}>
-            {approvers.map((a) => <li key={a.step_no}>{a.approver_name} — {a.pos_th}</li>)}
+            {approvers.map((a) => <li key={a.step_no}>{a.approver_name || '—'} — {a.pos_th}{a.sign_mode === 'wet' ? ' (ลายเซ็นสด บนกระดาษ)' : ''}</li>)}
           </ol>
           <label className="f" htmlFor="m-msg">ข้อความถึงผู้อนุมัติ (ไม่บังคับ) · Message
             <textarea className="in" id="m-msg" value={message} onChange={(e) => setMessage(e.target.value)} />
