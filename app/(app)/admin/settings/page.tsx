@@ -8,6 +8,8 @@ import type { Company, Department, Position, Tier } from '@/lib/types';
 
 type TierEdit = Omit<Tier, 'id' | 'max_amount'> & { id?: number; max: string };
 const slug = (s: string) => s.trim().toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+/** First code used by more than one row (saving such a list fails in the database), or null. */
+const dupCode = (codes: string[]) => codes.find((c, i) => c && codes.indexOf(c) !== i) ?? null;
 
 function General() {
   const { sb, settings, run, toast, reloadRefs } = useApp();
@@ -48,6 +50,8 @@ function Positions() {
       if (!p.code || !p.th.trim()) return toast('bad', 'กรอกรหัสและชื่อตำแหน่งให้ครบ · Code and Thai name required', '');
       if (!/^[a-z0-9_]{1,20}$/.test(p.code)) return toast('bad', 'รหัสตำแหน่งใช้ a–z 0–9 _ · Code: a–z, 0–9, _', p.code);
     }
+    const dup = dupCode(rows.map((p) => p.code));
+    if (dup) return toast('bad', `รหัสตำแหน่ง “${dup}” ซ้ำกัน · Duplicate code`, 'แก้รหัสของแถวที่เพิ่มใหม่ให้ไม่ซ้ำกับตำแหน่งที่มีอยู่ แล้วกดบันทึกอีกครั้ง · Give the new row a different code');
     const { ok } = await run('save-positions', sb.from('positions').upsert(rows.map(({ code, th, en, sort, note, sign_mode }) => ({ code, th: th.trim(), en: en.trim(), sort: Number(sort) || 0, note: (note || '').trim(), sign_mode: sign_mode || 'online' }))));
     if (ok) { toast('ok', 'บันทึกตำแหน่งแล้ว · Positions saved', ''); reloadRefs(); }
   }
@@ -153,6 +157,8 @@ function Departments() {
   async function save() {
     const fixed = rows.map((d) => ({ ...d, id: d.isNew ? slug(d.id || d.en || '') : d.id }));
     if (fixed.some((d) => !d.id || !d.th.trim())) return toast('bad', 'กรอกรหัส (อังกฤษ) และชื่อฝ่ายให้ครบ · Code and Thai name required', '');
+    const dup = dupCode(fixed.map((d) => d.id));
+    if (dup) return toast('bad', `รหัสฝ่าย “${dup}” ซ้ำกัน · Duplicate code`, 'แก้ช่องรหัสของแถวที่เพิ่มใหม่ให้ไม่ซ้ำกับฝ่ายที่มีอยู่ แล้วกดบันทึกอีกครั้ง · Give the new row a different code');
     const { ok } = await run('save-departments', sb.from('departments').upsert(fixed.map(({ id, th, en, sort, active }) => ({ id, th: th.trim(), en: en.trim(), sort: Number(sort) || 0, active }))));
     if (ok) { toast('ok', 'บันทึกฝ่ายแล้ว · Departments saved', ''); reloadRefs(); }
   }
@@ -185,6 +191,8 @@ function Companies() {
   async function save() {
     const fixed = rows.map((c) => ({ ...c, id: c.isNew ? slug(c.id || c.en || '') : c.id }));
     if (fixed.some((c) => !c.id || !c.th.trim())) return toast('bad', 'กรอกรหัส (อังกฤษ) และชื่อบริษัทให้ครบ · Code and Thai name required', '');
+    const dup = dupCode(fixed.map((c) => c.id));
+    if (dup) return toast('bad', `รหัสบริษัท “${dup}” ซ้ำกัน · Duplicate code`, 'แก้ช่องรหัสของแถวที่เพิ่มใหม่ให้ไม่ซ้ำกับบริษัทที่มีอยู่ (เช่น trr-bio มีอยู่แล้ว) แล้วกดบันทึกอีกครั้ง · Give the new row a different code');
     const { ok } = await run('save-companies', sb.from('companies').upsert(fixed.map(({ id, th, en, initials, address, logo_path, sort, active }) => ({ id, th: th.trim(), en: en.trim(), initials: initials.trim().slice(0, 4), address: address.trim(), logo_path, sort: Number(sort) || 0, active }))));
     if (ok) { toast('ok', 'บันทึกบริษัทแล้ว · Companies saved', ''); reloadRefs(); }
   }
