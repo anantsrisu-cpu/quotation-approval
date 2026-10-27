@@ -73,6 +73,7 @@ Every state change goes through database functions, so amounts, approvers and si
    ต่อด้วย [`supabase/migrations/0003_items_proxy_invites.sql`](supabase/migrations/0003_items_proxy_invites.sql) กด **Run** (หลายรายการต่อคำขอ ราคาก่อนหน้า สร้างบัญชีล่วงหน้า และผู้ดูแลร่างคำขอแทน)
    ต่อด้วย [`supabase/migrations/0004_discount_credit_leadtime.sql`](supabase/migrations/0004_discount_credit_leadtime.sql) กด **Run** (ส่วนลดต่อรายการ เครดิต และ Lead time ของผู้ขายแต่ละราย)
    ต่อด้วย [`supabase/migrations/0005_compare_sheet_fields.sql`](supabase/migrations/0005_compare_sheet_fields.sql) กด **Run** (ตารางเปรียบเทียบแนวนอน: Brand, ราคาประวัติเก่า, Warranty, ช่วงวงเงินของตำแหน่งผู้อนุมัติ)
+   ต่อด้วย [`supabase/migrations/0006_wet_signature.sql`](supabase/migrations/0006_wet_signature.sql) กด **Run** (PDF เป็นตารางเปรียบเทียบอย่างเดียว · กรอบผู้อนุมัติครบทุกตำแหน่ง ขีดฆ่าเมื่อวงเงินไม่ถึง · ตำแหน่งลายเซ็นสด · ชื่อ 2 บริษัทในเครือ)
    > ระบบที่ใช้งานอยู่แล้ว: รันเฉพาะไฟล์ที่ยังไม่เคยรัน ตามลำดับเลข ข้อมูลเดิมถูกแปลงให้อัตโนมัติ และรันซ้ำได้โดยไม่เสียหาย
 4. ไปที่ **Project Settings → API** (หรือ **Data API / API Keys**) จดค่า:
    - **Project URL** → ใช้เป็น `NEXT_PUBLIC_SUPABASE_URL`
@@ -181,10 +182,12 @@ psql -d qa_test -f supabase/migrations/0002_seed.sql
 psql -d qa_test -f supabase/migrations/0003_items_proxy_invites.sql
 psql -d qa_test -f supabase/migrations/0004_discount_credit_leadtime.sql
 psql -d qa_test -f supabase/migrations/0005_compare_sheet_fields.sql
+psql -d qa_test -f supabase/migrations/0006_wet_signature.sql
 psql -d qa_test -v ON_ERROR_STOP=1 -f supabase/tests/10_workflow_test.sql   # ends with: ALL TESTS PASSED
 psql -d qa_test -v ON_ERROR_STOP=1 -f supabase/tests/20_items_proxy_test.sql   # ends with: ALL 0003 TESTS PASSED
 psql -d qa_test -v ON_ERROR_STOP=1 -f supabase/tests/30_discount_test.sql      # ends with: ALL 0004 TESTS PASSED
 psql -d qa_test -v ON_ERROR_STOP=1 -f supabase/tests/40_sheet_fields_test.sql  # ends with: ALL 0005 TESTS PASSED
+psql -d qa_test -v ON_ERROR_STOP=1 -f supabase/tests/50_wet_signature_test.sql # ends with: ALL 0006 TESTS PASSED
 ```
 ครอบคลุม · Covers: first admin, applications, self-promotion blocked, server-side amounts and tiers, approver resolution by department, signatures required, forward rules, reject → reopen → resend (keeps number), admin remind/reassign/cancel, letter path rules, visibility for outsiders, disabled accounts.
 
