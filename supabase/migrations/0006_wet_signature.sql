@@ -15,6 +15,19 @@ alter table public.positions
 alter table public.requests
   add column if not exists sign_plan jsonb check (sign_plan is null or jsonb_typeof(sign_plan) = 'array');
 
+-- The two group companies always appear (as tick boxes) on the comparison sheet header;
+-- the buyer company chosen on the request is ticked. The starter company keeps its id.
+update public.companies set th = 'บริษัท ไทยรุ่งเรือง คอร์ปอเรชั่น จำกัด'
+ where id = 'main' and th = 'บริษัท ของคุณ จำกัด';
+insert into public.companies (id, th, en, initials, address, sort, active)
+select 'trr-corp', 'บริษัท ไทยรุ่งเรือง คอร์ปอเรชั่น จำกัด', '', 'TRR', '', 10, true
+ where not exists (select 1 from public.companies where th like '%ไทยรุ่งเรือง คอร์ปอเรชั่น%');
+insert into public.companies (id, th, en, initials, address, sort, active)
+select 'trr-bio', 'บริษัท ไทยรุ่งเรือง ไบโอ-เอ็นเนอร์จี้ จำกัด', '', 'TRR', '', 20, true
+ where not exists (select 1 from public.companies where th like '%ไทยรุ่งเรือง ไบโอ%');
+update public.companies set active = true
+ where th like '%ไทยรุ่งเรือง คอร์ปอเรชั่น%' or th like '%ไทยรุ่งเรือง ไบโอ%';
+
 -- approvers for an amount, hand-signed positions included (flagged)
 drop function if exists public.preview_approvers(numeric, text);
 create function public.preview_approvers(p_total numeric, p_dept text)
@@ -213,7 +226,8 @@ begin
       if i = 0 then first_approver := a; end if;
       i := i + 1;
     else
-      plan := plan || jsonb_build_array(jsonb_build_object('position', pp.code, 'mode', 'skip'));
+      plan := plan || jsonb_build_array(jsonb_build_object('position', pp.code, 'mode', 'skip',
+                'approver_id', public.resolve_approver(pp.code, r.dept)));
     end if;
   end loop;
   if missing <> '' then

@@ -27,6 +27,7 @@ values ('aaaaaaaa-0000-0000-0000-000000000002','purchasing','00000000-0000-0000-
 insert into request_files (request_id, path, name) values ('aaaaaaaa-0000-0000-0000-000000000002','aaaaaaaa-0000-0000-0000-000000000002/q.pdf','q.pdf');
 select submit_request('aaaaaaaa-0000-0000-0000-000000000002')::text;
 select t_check('plan: dm online, fm skip, md skip', (select string_agg(x->>'mode', ',') = 'online,skip,skip' from requests, jsonb_array_elements(sign_plan) x where id='aaaaaaaa-0000-0000-0000-000000000002'));
+select t_check('skipped positions keep the approver name', (select (sign_plan->1->>'approver_id') is not null from requests where id='aaaaaaaa-0000-0000-0000-000000000002'));
 select t_check('still pending for dm', (select status='pending' from requests where id='aaaaaaaa-0000-0000-0000-000000000002'));
 
 -- every approver of the tier hand-signs → complete at once
@@ -42,4 +43,6 @@ select t_check('all hand-signed: approved at once, no steps', (select status='ap
 
 select t_as('00000000-0000-0000-0000-00000000000a');
 update positions set sign_mode = 'online';
+select t_check('both group companies are active', (select count(*)=2 from companies where active and (th like '%ไทยรุ่งเรือง คอร์ปอเรชั่น%' or th like '%ไทยรุ่งเรือง ไบโอ%')));
+select t_check('starter company renamed, no duplicate added', (select th like '%คอร์ปอเรชั่น%' from companies where id='main') and not exists (select 1 from companies where id='trr-corp'));
 select 'ALL 0006 TESTS PASSED';

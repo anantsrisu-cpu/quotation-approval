@@ -72,7 +72,7 @@ export function useSheetData(r: RequestRow, steps: RequestStep[], draft: boolean
           heading,
           range: note(e.position),
           caption: 'Approved by',
-          name: e.mode === 'wet' && e.approver_id ? name(e.approver_id) : '',
+          name: e.approver_id ? name(e.approver_id) : '',
           position: posTh(e.position),
           date: '',
           signature: null,
