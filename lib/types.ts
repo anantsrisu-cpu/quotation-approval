@@ -20,6 +20,10 @@ export interface Profile {
   created_at: string;
 }
 
+/** One of the two delivery boxes of a vendor on the comparison sheet. */
+export interface DeliverySlot { place: string; on: boolean }
+export interface DeliveryPlace { id: number; name: string; slot: 1 | 2; sort: number; active: boolean }
+
 export interface Settings {
   id: number;
   vat_rate: number;
@@ -55,6 +59,11 @@ export interface LineItem {
   brand?: string;
   /** report number of this line, printed after its description */
   report_no?: string;
+  /** vendor ticked ✓ for this item (0 = เจ้าที่ 1, 1 = first comparison …), set by the server on submit */
+  award?: number | null;
+  award_auto?: number;
+  award_reason?: string;
+  award_line?: number;
   line_total?: number;
   prev_diff_pct?: number | null;
 }
@@ -70,6 +79,7 @@ export interface Comparison {
   credit_days?: number | null;
   lead_days?: number | null;
   warranty?: string;
+  delivery?: DeliverySlot[];
   /** line totals per item, filled by the server on submit */
   lines?: number[];
   /** older single-item requests */
@@ -117,6 +127,7 @@ export interface RequestRow {
   credit_days?: number | null;
   lead_days?: number | null;
   warranty?: string;
+  delivery?: DeliverySlot[];
   /** typed report number / approval date for the sheet header (optional) */
   report_no?: string;
   report_date?: string | null;

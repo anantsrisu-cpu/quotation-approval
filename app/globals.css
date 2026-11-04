@@ -209,3 +209,15 @@ body{margin:0}
 .kv dd{margin:2px 0 0;overflow-wrap:anywhere}
 .logo-img{width:62px;height:62px;object-fit:contain;border-radius:10px}
 .banner{background:var(--warn-bg);color:var(--warn);border-bottom:1px solid #E9C98F;padding:8px 16px;font-size:13px}
+/* per-item ✓ award and delivery boxes on the comparison grid */
+table.cmp td.won{background:var(--sage-bg);box-shadow:inset 0 0 0 2px var(--sage-ink)}
+table.cmp .award{display:flex;align-items:center;gap:6px;justify-content:flex-end;margin-top:6px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;color:var(--ink-2)}
+table.cmp .award.on{color:var(--sage-ink)}
+table.cmp .award input{width:18px;height:18px;accent-color:var(--sage-ink);margin:0}
+table.cmp .award .low{font-size:11px;font-weight:600;padding:1px 6px;border-radius:99px;background:var(--soft);border:1px solid var(--beige);color:var(--ink-2)}
+table.cmp tr.why td{background:#fff7f5;border-top:0}
+table.cmp tr.why input.in{min-width:0;width:100%}
+.dlv{display:flex;flex-direction:column;gap:6px;margin-top:4px}
+.dlv-slot{display:flex;align-items:center;gap:6px}
+.dlv-slot input[type=checkbox]{width:18px;height:18px;flex:none;accent-color:var(--brown);margin:0}
+.dlv-slot select.in{min-height:36px;font-size:13px;min-width:140px;padding-block:4px}

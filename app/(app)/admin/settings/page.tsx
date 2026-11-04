@@ -4,7 +4,7 @@ import { useApp } from '@/components/AppProvider';
 import { AdminGate } from '@/components/AdminGate';
 import { PageHead } from '@/components/ui';
 import { fmt, num } from '@/lib/format';
-import type { Company, Department, Position, Tier } from '@/lib/types';
+import type { Company, DeliveryPlace, Department, Position, Tier } from '@/lib/types';
 
 type TierEdit = Omit<Tier, 'id' | 'max_amount'> & { id?: number; max: string };
 const slug = (s: string) => s.trim().toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
@@ -255,15 +255,63 @@ function Companies() {
   );
 }
 
+type PlaceEdit = Omit<DeliveryPlace, 'id'> & { id?: number };
+/** Delivery places offered in the two delivery boxes of every vendor on the comparison sheet. */
+function Places() {
+  const { sb, places, run, toast, reloadRefs } = useApp();
+  const [rows, setRows] = useState<PlaceEdit[]>([]);
+  useEffect(() => setRows(places.map((p) => ({ ...p }))), [places]);
+  const upd = (i: number, patch: Partial<PlaceEdit>) => setRows(rows.map((x, j) => (j === i ? { ...x, ...patch } : x)));
+  async function save() {
+    const fixed = rows.map((p) => ({ ...p, name: p.name.trim() }));
+    if (fixed.some((p) => !p.name)) return toast('bad', 'กรอกชื่อสถานที่ให้ครบ · Enter every place name', '');
+    if (fixed.some((p) => p.name.length > 60)) return toast('bad', 'ชื่อสถานที่ยาวเกิน 60 ตัวอักษร · Name too long', '');
+    const dup = dupCode(fixed.map((p) => p.name));
+    if (dup) return toast('bad', `สถานที่ “${dup}” ซ้ำกัน · Duplicate place`, 'ชื่อสถานที่ต้องไม่ซ้ำกัน · Each place name must be unique');
+    for (const p of fixed) {
+      const row = { name: p.name, slot: p.slot === 2 ? 2 : 1, sort: Number(p.sort) || 0, active: p.active };
+      const r = p.id ? await run('update-place', sb.from('delivery_places').update(row).eq('id', p.id)) : await run('insert-place', sb.from('delivery_places').insert(row));
+      if (!r.ok) return reloadRefs();
+    }
+    toast('ok', 'บันทึกสถานที่จัดส่งแล้ว · Delivery places saved', '');
+    reloadRefs();
+  }
+  return (
+    <div className="card">
+      <div className="actions"><h2>สถานที่จัดส่งสินค้า · Delivery places</h2>
+        <div className="row" style={{ gap: 8 }}>
+          <button className="btn sm" onClick={() => setRows([...rows, { name: '', slot: 1, sort: (rows.filter((x) => x.slot === 1).at(-1)?.sort || 0) + 10, active: true }])}>+ เพิ่ม · Add</button>
+          <button className="btn p sm" onClick={save}>บันทึก · Save</button>
+        </div>
+      </div>
+      <span className="note">ผู้ขายแต่ละรายมีช่องสถานที่จัดส่ง 2 ช่องในตารางเปรียบเทียบ ช่อง 1 ตั้งต้นเป็นโรงงาน ช่อง 2 ตั้งต้นเป็นคลัง ผู้จัดทำเลือกคำจากรายการนี้และติ๊ก ✓ ที่สถานที่ที่จัดส่ง · Each vendor has two delivery boxes; preparers pick a place from this list. ปิดใช้งานแทนการลบ · Deactivate instead of deleting.</span>
+      {rows.map((p, i) => (
+        <div key={p.id ?? `n${i}`} className="row" style={{ gap: 10, alignItems: 'flex-end', border: '1px solid var(--beige)', borderRadius: 10, padding: 10 }}>
+          <label className="f" style={{ flex: '3 1 200px' }}>ชื่อสถานที่ · Place<input className="in" id={`pl-name${i}`} value={p.name} maxLength={60} placeholder="เช่น โรงงานTRRC" onChange={(e) => upd(i, { name: e.target.value })} /></label>
+          <label className="f" style={{ flex: '2 1 160px' }}>ช่องเริ่มต้น · Box
+            <select className="in" value={p.slot} onChange={(e) => upd(i, { slot: e.target.value === '2' ? 2 : 1 })}>
+              <option value={1}>ช่อง 1 (โรงงาน)</option>
+              <option value={2}>ช่อง 2 (คลัง)</option>
+            </select>
+          </label>
+          <label className="f" style={{ flex: '1 1 70px' }}>ลำดับ<input className="in r" value={p.sort} onChange={(e) => upd(i, { sort: Number(e.target.value) || 0 })} /></label>
+          <label className="check"><input type="checkbox" checked={p.active} onChange={(e) => upd(i, { active: e.target.checked })} />ใช้งาน</label>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   return (
     <AdminGate>
-      <PageHead title="ตั้งค่าระบบ" lead="Application settings — price tiers, approver positions, departments, companies and letter details" />
+      <PageHead title="ตั้งค่าระบบ" lead="Application settings — price tiers, approver positions, departments, companies, delivery places and letter details" />
       <Tiers />
       <Positions />
       <General />
       <Companies />
       <Departments />
+      <Places />
     </AdminGate>
   );
 }

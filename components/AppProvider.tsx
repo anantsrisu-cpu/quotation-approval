@@ -4,7 +4,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { getSupabase } from '@/lib/supabase/client';
 import { reportError } from '@/lib/errors';
 import { errText } from '@/lib/format';
-import type { Company, Department, Notification, Position, Profile, Role, Settings, Tier } from '@/lib/types';
+import type { Company, DeliveryPlace, Department, Notification, Position, Profile, Role, Settings, Tier } from '@/lib/types';
 
 type ToastType = 'ok' | 'bad' | 'info';
 interface Toast { id: number; type: ToastType; title: string; body?: string }
@@ -19,6 +19,7 @@ interface AppCtx {
   tiers: Tier[];
   departments: Department[];
   companies: Company[];
+  places: DeliveryPlace[];
   people: Record<string, Profile>;
   notifs: Notification[];
   unread: number;
@@ -57,6 +58,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [tiers, setTiers] = useState<Tier[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
+  const [places, setPlaces] = useState<DeliveryPlace[]>([]);
   const [people, setPeople] = useState<Record<string, Profile>>({});
   const [notifs, setNotifs] = useState<Notification[]>([]);
   const [waitingCount, setWaitingCount] = useState(0);
@@ -104,14 +106,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [sb]);
 
   const reloadRefs = useCallback(async () => {
-    const [s, p, t, d, c, pp] = await Promise.all([
+    const [s, p, t, d, c, pp, dp] = await Promise.all([
       sb.from('app_settings').select('*').eq('id', 1).maybeSingle(),
       sb.from('positions').select('*').order('sort'),
       sb.from('tiers').select('*').order('sort'),
       sb.from('departments').select('*').order('sort'),
       sb.from('companies').select('*').order('sort'),
       sb.from('profiles').select('*').order('name'),
+      sb.from('delivery_places').select('*').order('slot').order('sort'),
     ]);
+    setPlaces((dp.data as DeliveryPlace[]) || []);
     setSettings((s.data as Settings) || null);
     setPositions((p.data as Position[]) || []);
     setTiers((t.data as Tier[]) || []);
@@ -202,7 +206,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo<AppCtx>(() => {
     const has = (r: Role) => !!me && me.status === 'active' && me.roles.includes(r);
     return {
-      sb, uid, me, ready, settings, positions, tiers, departments, companies, people, notifs,
+      sb, uid, me, ready, settings, positions, tiers, departments, companies, places, people, notifs,
       unread: notifs.filter((n) => !n.read_at).length,
       waitingCount, bump,
       refresh: () => setBump((b) => b + 1),
@@ -213,7 +217,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       company: (id) => companies.find((c) => c.id === id) || companies[0] || null,
       logoUrl: (c) => (c?.logo_path ? sb.storage.from('logos').getPublicUrl(c.logo_path).data.publicUrl : null),
     };
-  }, [sb, uid, me, ready, settings, positions, tiers, departments, companies, people, notifs, waitingCount, bump, reloadRefs, reloadMe, toast, run, markRead]);
+  }, [sb, uid, me, ready, settings, positions, tiers, departments, companies, places, people, notifs, waitingCount, bump, reloadRefs, reloadMe, toast, run, markRead]);
 
   return (
     <Ctx.Provider value={value}>

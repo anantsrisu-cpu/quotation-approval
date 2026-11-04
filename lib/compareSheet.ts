@@ -21,6 +21,8 @@ export interface SheetItem {
   prevVendor?: string;
   prevDate?: string | null; // yyyy-mm-dd
   reportNo?: string; // printed after the description
+  /** vendor ticked ✓ for this item (index into vendors) */
+  award?: number | null;
 }
 export interface SheetVendor {
   name: string;
@@ -35,6 +37,10 @@ export interface SheetVendor {
   warranty?: string;
   leadDays?: number | null;
   creditDays?: number | null;
+  /** the vendor's two delivery boxes: ☑/☐ + place */
+  delivery?: { place: string; on: boolean }[];
+  /** amount of the ✓ lines bought from this vendor, before VAT */
+  awarded?: number;
 }
 export interface SheetSigner {
   heading: string; // ผู้อนุมัติ (1) / ผู้จัดทำ
@@ -56,7 +62,7 @@ export interface SheetData {
   info: [string, string][]; // right-hand header lines
   rev: number;
   items: SheetItem[];
-  vendors: SheetVendor[]; // selected vendor first
+  vendors: SheetVendor[]; // เจ้าที่ 1 (the main quotation) first
   vatRate: number;
   notes: string[];
   signers: SheetSigner[]; // left → right as printed
@@ -103,6 +109,11 @@ const CSS = `
 .cs-main td.c{text-align:center}
 .cs-main tbody td{vertical-align:top}
 .cs-main .sel{background:#FBF6EF}
+.cs-main td.won{background:#EAF3E6;font-weight:600}
+.cs-main .tk{float:left;font-weight:700;color:#1E6B2E;font-size:1.15em;line-height:1}
+.cs-foot td.dl{font-size:.92em;background:#fff;white-space:normal;line-height:1.25}
+.cs-foot td.dl .cs-box{width:10px;height:10px;line-height:8px;font-size:9px;margin-right:3px}
+.cs-foot tr.aw td{background:#EAF3E6}
 .cs-main .sub{display:block;font-size:.82em;color:#555;white-space:normal}
 .cs-main .desc{white-space:pre-wrap;font-size:.9em;color:#333}
 .cs-main tr.fill td{border-top:none}
@@ -171,7 +182,7 @@ function theadHtml(d: SheetData) {
 <tr>${d.vendors
     .map(
       (v, i) =>
-        `<th colspan="2"${v.selected ? ' class="sel"' : ''}>เจ้าที่ ${i + 1}${v.selected ? ' ✓ ที่เลือก' : ''}<br><b style="font-weight:600">${esc(v.name)}</b></th>`,
+        `<th colspan="2"${v.selected ? ' class="sel"' : ''}>เจ้าที่ ${i + 1}${v.selected ? ' ✓' : ''}<br><b style="font-weight:600">${esc(v.name)}</b></th>`,
     )
     .join('')}</tr>
 <tr>${d.vendors.map((v) => `<th${v.selected ? ' class="sel"' : ''}>ราคาต่อหน่วย</th><th${v.selected ? ' class="sel"' : ''}>ราคารวม</th>`).join('')}</tr>
@@ -187,26 +198,47 @@ function rowHtml(d: SheetData, k: number) {
   return `<tr data-k="${k}"><td class="c">${k + 1}</td><td>${esc(it.sku)}</td><td>${esc(it.name)}${it.description ? `<div class="desc">${esc(it.description)}</div>` : ''}${it.reportNo ? `<div class="desc">รายงานเลขที่ ${esc(it.reportNo)}</div>` : ''}</td>
 <td>${esc(it.brand || '')}</td><td class="n">${qtyFmt(it.qty)}</td><td class="c">${esc(it.unit)}</td><td class="n" style="white-space:normal;text-align:right">${prev}</td>
 ${d.vendors
-  .map((v) => {
-    const cls = v.selected ? ' sel' : '';
+  .map((v, vi) => {
     const disc = v.disc[k];
-    return `<td class="n${cls}">${money(v.net[k])}${disc ? `<span class="sub">${money(v.unit[k])} ลด ${esc(disc)}</span>` : ''}</td><td class="n${cls}">${money(v.line[k])}</td>`;
+    const won = it.award === vi;
+    return `<td class="n">${money(v.net[k])}${disc ? `<span class="sub">${money(v.unit[k])} ลด ${esc(disc)}</span>` : ''}</td><td class="n${won ? ' won' : ''}">${won ? '<span class="tk" aria-label="สั่งซื้อ">✓</span>' : ''}${money(v.line[k])}</td>`;
   })
   .join('')}</tr>`;
 }
 
 function tfootHtml(d: SheetData) {
   const vatPct = Math.round(d.vatRate * 100);
-  const money3 = (label: string, pick: (v: SheetVendor) => number, first: boolean) =>
-    `<tr>${first ? '<td colspan="4" rowspan="6" class="blank"></td>' : ''}<td colspan="2" class="lbl">${label}</td><td></td>${d.vendors
+  // the ✓ row only matters when there is more than one vendor to buy from
+  const showAw = d.vendors.length > 1;
+  const rows = 7 + (showAw ? 1 : 0);
+  let first = true;
+  const lead = () => {
+    if (!first) return '';
+    first = false;
+    return `<td colspan="4" rowspan="${rows}" class="blank"></td>`;
+  };
+  const money3 = (label: string, pick: (v: SheetVendor) => number) =>
+    `<tr>${lead()}<td colspan="2" class="lbl">${label}</td><td></td>${d.vendors
       .map((v) => `<td></td><td class="n">${money(pick(v))}</td>`)
       .join('')}</tr>`;
   const text3 = (label: string, pick: (v: SheetVendor) => string) =>
-    `<tr><td colspan="2" class="lbl">${label}</td><td></td>${d.vendors.map((v) => `<td colspan="2" class="c">${esc(pick(v))}</td>`).join('')}</tr>`;
+    `<tr>${lead()}<td colspan="2" class="lbl">${label}</td><td></td>${d.vendors.map((v) => `<td colspan="2" class="c">${esc(pick(v))}</td>`).join('')}</tr>`;
+  const slot = (s?: { place: string; on: boolean }) =>
+    `<td class="dl">${s && s.place ? `<span class="cs-box">${s.on ? '✓' : ''}</span>${esc(s.place)}` : ''}</td>`;
+  const delivery = `<tr>${lead()}<td colspan="2" class="lbl">สถานที่จัดส่งสินค้า</td><td></td>${d.vendors
+    .map((v) => slot(v.delivery?.[0]) + slot(v.delivery?.[1]))
+    .join('')}</tr>`;
+  const awarded = showAw
+    ? `<tr class="aw">${lead()}<td colspan="2" class="lbl">สั่งซื้อตาม ✓<br>(ก่อน VAT)</td><td></td>${d.vendors
+        .map((v) => `<td colspan="2" class="n">${v.awarded ? `✓ ${money(v.awarded)}` : '-'}</td>`)
+        .join('')}</tr>`
+    : '';
   return `<tbody class="cs-foot">
-${money3('TOTAL', (v) => v.subtotal, true)}
-${money3(`VAT ${vatPct}%`, (v) => v.vat, false)}
-${money3('GRAND TOTAL', (v) => v.total, false)}
+${delivery}
+${money3('TOTAL', (v) => v.subtotal)}
+${money3(`VAT ${vatPct}%`, (v) => v.vat)}
+${money3('GRAND TOTAL', (v) => v.total)}
+${awarded}
 ${text3('WARRANTY', (v) => v.warranty || '')}
 ${text3('LEAD-TIME', (v) => days(v.leadDays))}
 ${text3('PAYMENT TERM', (v) => (v.creditDays == null ? '' : v.creditDays === 0 ? 'เงินสด' : `เครดิต ${v.creditDays} วัน`))}

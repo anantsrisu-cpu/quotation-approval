@@ -55,14 +55,15 @@ select t_expect_error('comparison with too few prices', $$ select submit_request
 update requests set comparisons = jsonb_set(comparisons, '{0,prices}', (select jsonb_agg(110 * g order by g) from generate_series(1, 12) g)) where id='33333333-3333-3333-3333-333333333333';
 select submit_request('33333333-3333-3333-3333-333333333333', '12 รายการ')::text;
 
--- sum(100*g*g, g=1..12) = 65,000 ; VAT 4,550 ; total 69,550 → tier 2
-select t_check('subtotal from 12 lines', (select subtotal=65000 and vat=4550 and total=69550 from requests where id='33333333-3333-3333-3333-333333333333'));
+-- เจ้าที่ 1: sum(100*g*g) = 65,000 · B is cheaper on every line (95*g*g) → every item ticked to B (0008)
+-- approved = 61,750 ; VAT 4,322.50 ; total 66,072.50 → tier 2
+select t_check('approved amount from 12 ticked lines', (select subtotal=61750 and vat=4322.50 and total=66072.50 from requests where id='33333333-3333-3333-3333-333333333333'));
 select t_check('12 items stored with names/units/line totals', (select jsonb_array_length(items)=12 and items->11->>'product_name'='สินค้าทดสอบ 12' and items->0->>'unit'='ชิ้น' and (items->11->>'line_total')::numeric=14400 and items->0->>'sku'='P-001' from requests where id='33333333-3333-3333-3333-333333333333'));
 select t_check('long description kept', (select length(items->11->>'description') > 100 from requests where id='33333333-3333-3333-3333-333333333333'));
 select t_check('previous price % (100 vs 90 → +11.11%)', (select (items->1->>'prev_diff_pct')::numeric = 11.11 and items->0->'prev_diff_pct' = 'null'::jsonb from requests where id='33333333-3333-3333-3333-333333333333'));
 select t_check('summary name for lists', (select product_name='สินค้าทดสอบ 1 และอีก 11 รายการ' and sku like 'P-001, P-002%' from requests where id='33333333-3333-3333-3333-333333333333'));
 select t_check('comparison per-vendor totals (A 71,500 / B 61,750 subtotal)', (select jsonb_array_length(comparisons)=2 and (comparisons->0->>'subtotal')::numeric=71500 and (comparisons->1->>'subtotal')::numeric=61750 and jsonb_array_length(comparisons->1->'lines')=12 from requests where id='33333333-3333-3333-3333-333333333333'));
-select t_check('low reason kept because B is cheaper', (select low_reason='ส่งของเร็วกว่า' from requests where id='33333333-3333-3333-3333-333333333333'));
+select t_check('cheaper vendor B ticked on every line', (select bool_and((x->>'award')::int = 2) from requests, jsonb_array_elements(items) x where id='33333333-3333-3333-3333-333333333333'));
 select t_check('tier 2 → two steps', (select count(*)=2 from request_steps where request_id='33333333-3333-3333-3333-333333333333'));
 
 -- ---- admin drafts on behalf of a preparer ----

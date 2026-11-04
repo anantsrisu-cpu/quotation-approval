@@ -25,7 +25,7 @@ insert into request_files (request_id, path, name) values ('66666666-6666-6666-6
 
 -- selected: 950*10 + 450*2 + 2000 = 12,400 ; A: 960.40*10 + 520*2 + 1795.50*1 = 12,439.50 ; B: 13,000
 select submit_request('66666666-6666-6666-6666-666666666666')::text;
-select t_check('net prices & subtotal after discount', (select subtotal=12400 and (items->0->>'net_price')::numeric=950 and (items->1->>'net_price')::numeric=450 and items->0->>'discount'='5%' and (items->2->>'line_total')::numeric=2000 from requests where id='66666666-6666-6666-6666-666666666666'));
+select t_check('net prices after discount; approved = cheapest per line (9,500 + 900 + A 1,795.50)', (select subtotal=12195.50 and (items->0->>'net_price')::numeric=950 and (items->1->>'net_price')::numeric=450 and items->0->>'discount'='5%' and (items->2->>'line_total')::numeric=2000 from requests where id='66666666-6666-6666-6666-666666666666'));
 select t_check('previous price % uses the net price (950 vs 900 = +5.56%)', (select (items->0->>'prev_diff_pct')::numeric=5.56 from requests where id='66666666-6666-6666-6666-666666666666'));
 select t_check('comparison A with discounts = 12,439.50', (select (comparisons->0->>'subtotal')::numeric=12439.50 and (comparisons->0->'nets'->>2)::numeric=1795.50 and comparisons->0->'discounts'->>0='2%' from requests where id='66666666-6666-6666-6666-666666666666'));
 select t_check('credit & lead time stored', (select credit_days=30 and lead_days=7 and (comparisons->0->>'credit_days')::int=45 and comparisons->1->'credit_days'='null'::jsonb and (comparisons->1->>'lead_days')::int=3 from requests where id='66666666-6666-6666-6666-666666666666'));

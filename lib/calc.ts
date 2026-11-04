@@ -1,5 +1,5 @@
 import { num, r2 } from './format';
-import type { Comparison, LineItem, RequestRow } from './types';
+import type { Comparison, DeliverySlot, LineItem, RequestRow } from './types';
 
 /** Line item as typed on the form (strings so half-typed numbers stay editable). */
 export interface DraftItem {
@@ -14,6 +14,9 @@ export interface DraftItem {
   prev_date: string;
   brand: string;
   report_no: string;
+  /** vendor ticked ✓ for this item (0 = เจ้าที่ 1, 1 = first comparison …); null = the cheapest */
+  award: number | null;
+  award_reason: string;
 }
 /** Comparison vendor as typed: one unit price and discount per line item, same order as the items. */
 export interface DraftComp {
@@ -23,10 +26,11 @@ export interface DraftComp {
   credit_days: string;
   lead_days: string;
   warranty: string;
+  delivery: DeliverySlot[];
 }
 
-export const blankItem = (unit = 'ชิ้น'): DraftItem => ({ sku: '', description: '', qty: '1', unit, unit_price: '', discount: '', prev_price: '', prev_vendor: '', prev_date: '', brand: '', report_no: '' });
-export const blankComp = (n: number): DraftComp => ({ vendor: '', prices: Array(n).fill(''), discounts: Array(n).fill(''), credit_days: '', lead_days: '', warranty: '' });
+export const blankItem = (unit = 'ชิ้น'): DraftItem => ({ sku: '', description: '', qty: '1', unit, unit_price: '', discount: '', prev_price: '', prev_vendor: '', prev_date: '', brand: '', report_no: '', award: null, award_reason: '' });
+export const blankComp = (n: number): DraftComp => ({ vendor: '', prices: Array(n).fill(''), discounts: Array(n).fill(''), credit_days: '', lead_days: '', warranty: '', delivery: [] });
 
 /** % change of the new (net) unit price against the previous price (null when there is no previous price). */
 export const prevPct = (up: number, prev: number | null | undefined) =>
@@ -64,8 +68,14 @@ export function parseDays(v: string): { days: number | null; error: string | nul
   return { days: +t, error: null };
 }
 
-/** Same arithmetic the database uses in submit_request (shown live on the form). */
-export function calcItems(items: DraftItem[], vatRate: number, comps: DraftComp[]) {
+/**
+ * Same arithmetic the database uses in submit_request (shown live on the form).
+ * Every item is bought from the vendor ticked ✓ for it: by default the cheapest line
+ * (0 = เจ้าที่ 1, 1 = first comparison …); another vendor needs a reason.
+ * sub / vat / total = the ticked lines = the amount to approve.
+ * q1Sub / q1Total = เจ้าที่ 1's whole quotation (what the comparison differences refer to).
+ */
+export function calcItems(items: DraftItem[], vatRate: number, comps: DraftComp[], noComp = false) {
   const lines = items.map((it) => {
     const up = num(it.unit_price);
     const q = num(it.qty);
@@ -73,10 +83,9 @@ export function calcItems(items: DraftItem[], vatRate: number, comps: DraftComp[
     const prev = it.prev_price.trim() === '' ? null : num(it.prev_price);
     return { up, q, net, discErr: error, hasDisc: !!normDiscount(it.discount), line: r2(net * q), prev, pct: prevPct(net, prev) };
   });
-  const sub = r2(lines.reduce((s, l) => s + l.line, 0));
-  const vat = r2(sub * vatRate);
-  const total = r2(sub + vat);
-  const cs = comps.map((c) => {
+  const q1Sub = r2(lines.reduce((s, l) => s + l.line, 0));
+  const q1Total = r2(q1Sub + r2(q1Sub * vatRate));
+  const cs = (noComp ? [] : comps).map((c) => {
     const cl = lines.map((l, k) => {
       const p = num(c.prices[k]);
       const { net, error } = applyDiscount(p, c.discounts[k]);
@@ -85,11 +94,30 @@ export function calcItems(items: DraftItem[], vatRate: number, comps: DraftComp[
     const csub = r2(cl.reduce((s, x) => s + x.line, 0));
     const ctot = r2(csub + r2(csub * vatRate));
     const complete = cl.length > 0 && cl.every((x) => x.up > 0 && !x.discErr);
-    return { vendor: c.vendor, lines: cl, sub: csub, total: ctot, diff: r2(ctot - total), complete };
+    return { vendor: c.vendor, lines: cl, sub: csub, total: ctot, diff: r2(ctot - q1Total), complete };
   });
-  const vals = cs.filter((c) => c.complete).map((c) => c.total);
-  const minC = vals.length ? Math.min(...vals) : null;
-  return { lines, sub, vat, total, comps: cs, minC, lowest: minC === null || total <= minC };
+  // ✓ per item: the cheapest priced line, unless another vendor was ticked
+  const awards = lines.map((l, k) => {
+    let best = 0;
+    let bestLine = l.line;
+    cs.forEach((c, i) => {
+      const x = c.lines[k];
+      if (x && x.up > 0 && !x.discErr && x.line < bestLine) {
+        best = i + 1;
+        bestLine = x.line;
+      }
+    });
+    const want = items[k].award;
+    const pick = want != null && want >= 0 && want <= cs.length ? want : best;
+    const line = pick === 0 ? l.line : cs[pick - 1].lines[k].line;
+    return { best, pick, line, override: pick !== best };
+  });
+  const sub = r2(awards.reduce((s, a) => s + a.line, 0));
+  const vat = r2(sub * vatRate);
+  const total = r2(sub + vat);
+  // ticked amount per vendor (0 = เจ้าที่ 1)
+  const byVendor = [0, ...cs.map(() => 0)].map((_, v) => r2(awards.reduce((s, a) => s + (a.pick === v ? a.line : 0), 0)));
+  return { lines, sub, vat, total, q1Sub, q1Total, comps: cs, awards, byVendor };
 }
 
 /** Line items of a request (older single-item requests are shown as one line). */

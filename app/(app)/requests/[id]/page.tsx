@@ -8,7 +8,7 @@ import { SignaturePad, type PadHandle } from '@/components/SignaturePad';
 import { Chain, Chip, Loading, Modal } from '@/components/ui';
 import { PURP, SUBJ, dOnly, dt, fileSize, fmt } from '@/lib/format';
 import { daysText, itemsOf } from '@/lib/calc';
-import { CompareTable, ItemsTable } from '@/components/ItemTables';
+import { CompareTable, DeliveryText, ItemsTable } from '@/components/ItemTables';
 import { downloadUrl, elementToPdf } from '@/lib/pdf';
 import { reportError } from '@/lib/errors';
 import type { LogEntry, RequestFile, RequestRow, RequestStep } from '@/lib/types';
@@ -264,7 +264,10 @@ export default function RequestDetail() {
           <div className="card">
             <h2>คู่เทียบราคา · Price comparison</h2>
             {r.no_comp ? (
-              <div className="warn-box">ไม่มีคู่เทียบ · เหตุผล: {r.no_comp_reason}</div>
+              <>
+                <div className="warn-box">ไม่มีคู่เทียบ · เหตุผล: {r.no_comp_reason}</div>
+                {r.delivery?.some((x) => x.place) && <div>สถานที่จัดส่งสินค้า · Delivery: <DeliveryText list={r.delivery} /></div>}
+              </>
             ) : (
               <CompareTable r={r} />
             )}

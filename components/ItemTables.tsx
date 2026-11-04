@@ -1,7 +1,40 @@
 'use client';
 import { compDiscounts, compNets, compPrices, daysText, itemsOf, netOf, normDiscount } from '@/lib/calc';
 import { dOnly, fmt, fmtQty, r2 } from '@/lib/format';
-import type { RequestRow } from '@/lib/types';
+import type { DeliverySlot, LineItem, RequestRow } from '@/lib/types';
+
+/** Vendor ticked ✓ for each item (older requests: everything from the main vendor). */
+export function awardsOf(r: RequestRow, items: LineItem[] = itemsOf(r)) {
+  const comps = r.no_comp ? [] : r.comparisons || [];
+  return items.map((it) => (it.award != null && it.award >= 0 && it.award <= comps.length ? it.award : 0));
+}
+
+/** The price a ticked line is bought at. */
+function boughtLine(r: RequestRow, it: LineItem, k: number, v: number, n: number) {
+  if (v === 0) {
+    const net = netOf(it);
+    return { vendor: r.vendor, unit: it.unit_price, disc: normDiscount(it.discount), net, line: it.line_total ?? r2(net * it.qty) };
+  }
+  const c = (r.comparisons || [])[v - 1];
+  const net = compNets(c, n)[k];
+  const line = it.award_line ?? (c.lines?.[k] != null ? Number(c.lines[k]) : r2(net * it.qty));
+  return { vendor: c.vendor, unit: compPrices(c)[k] || 0, disc: compDiscounts(c, n)[k], net, line };
+}
+
+/** ☑ place · ☐ place */
+export function DeliveryText({ list }: { list?: DeliverySlot[] | null }) {
+  const xs = (list || []).filter((x) => x.place);
+  if (!xs.length) return <span className="note">—</span>;
+  return (
+    <span style={{ display: 'inline-flex', flexDirection: 'column', gap: 2, alignItems: 'flex-end' }}>
+      {xs.map((x, i) => (
+        <span key={i} style={{ whiteSpace: 'nowrap', color: x.on ? 'var(--ink)' : 'var(--muted)', fontWeight: x.on ? 600 : 400 }}>
+          {x.on ? '☑' : '☐'} {x.place}
+        </span>
+      ))}
+    </span>
+  );
+}
 
 const R = { textAlign: 'right' as const };
 
@@ -19,7 +52,10 @@ export function PrevPct({ pct }: { pct: number | null | undefined }) {
 /** Line items of a request: SKU, description, quantity, prices, previous price and change. */
 export function ItemsTable({ r }: { r: RequestRow }) {
   const items = itemsOf(r);
-  const hasDisc = items.some((it) => normDiscount(it.discount));
+  const aw = awardsOf(r, items);
+  const bought = items.map((it, k) => boughtLine(r, it, k, aw[k], items.length));
+  const multi = !r.no_comp && (r.comparisons || []).length > 0;
+  const hasDisc = bought.some((b) => b.disc);
   const span = hasDisc ? 8 : 6;
   return (
     <div className="tw">
@@ -39,8 +75,9 @@ export function ItemsTable({ r }: { r: RequestRow }) {
         </thead>
         <tbody>
           {items.map((it, i) => {
-            const net = netOf(it);
-            const pct = it.prev_diff_pct ?? (it.prev_price ? r2(((net - it.prev_price) / it.prev_price) * 100) : null);
+            const b = bought[i];
+            const net = b.net;
+            const pct = aw[i] === 0 && it.prev_diff_pct != null ? it.prev_diff_pct : it.prev_price ? r2(((net - it.prev_price) / it.prev_price) * 100) : null;
             return (
               <tr key={i}>
                 <td className="note">{i + 1}</td>
@@ -49,23 +86,29 @@ export function ItemsTable({ r }: { r: RequestRow }) {
                   {it.brand && <span className="chip st-draft" style={{ marginLeft: 6 }}>{it.brand}</span>}
                   {it.description && <div className="note" style={{ whiteSpace: 'pre-wrap', color: 'var(--ink-2)' }}>{it.description}</div>}
                   {it.report_no && <div className="note" style={{ color: 'var(--ink-2)' }}>รายงานเลขที่ {it.report_no}</div>}
+                  {multi && (
+                    <div className="note" style={{ color: 'var(--sage-ink)', fontWeight: 600 }}>
+                      ✓ ซื้อจาก เจ้าที่ {aw[i] + 1} {b.vendor}
+                      {it.award_reason && <span style={{ color: 'var(--bad)', fontWeight: 400 }}> · ไม่ใช่ราคาต่ำสุด: {it.award_reason}</span>}
+                    </div>
+                  )}
                 </td>
                 <td className="num" style={{ ...R, whiteSpace: 'nowrap' }}>{fmtQty(it.qty)} {it.unit}</td>
-                <td className="num" style={R}>{fmt(it.unit_price)}</td>
-                {hasDisc && <td className="num" style={R}>{normDiscount(it.discount) || '—'}</td>}
+                <td className="num" style={R}>{fmt(b.unit)}</td>
+                {hasDisc && <td className="num" style={R}>{b.disc || '—'}</td>}
                 {hasDisc && <td className="num" style={R}><b>{fmt(net)}</b></td>}
                 <td className="num" style={R}>
                   {it.prev_price != null ? fmt(it.prev_price) : <span className="note">—</span>}
                   {(it.prev_vendor || it.prev_date) && <div className="note" style={{ whiteSpace: 'normal' }}>{[it.prev_vendor, it.prev_date ? dOnly(it.prev_date) : ''].filter(Boolean).join(' · ')}</div>}
                 </td>
                 <td style={R}><PrevPct pct={pct} /></td>
-                <td className="num" style={R}>{fmt(it.line_total ?? r2(net * it.qty))}</td>
+                <td className="num" style={R}>{fmt(b.line)}</td>
               </tr>
             );
           })}
         </tbody>
         <tfoot>
-          <tr><td colSpan={span} style={R}>มูลค่ารวม ก่อน VAT · Subtotal</td><td className="num" style={R}>{fmt(r.subtotal)}</td></tr>
+          <tr><td colSpan={span} style={R}>{multi ? 'ยอดที่ขออนุมัติ ก่อน VAT (ตาม ✓) · Subtotal' : 'มูลค่ารวม ก่อน VAT · Subtotal'}</td><td className="num" style={R}>{fmt(r.subtotal)}</td></tr>
           <tr><td colSpan={span} style={R}>VAT {Math.round((r.vat_rate || 0.07) * 100)}%</td><td className="num" style={R}>{fmt(r.vat)}</td></tr>
           <tr><td colSpan={span} style={R}><b>ยอดรวมสุทธิ (บาท) · Net total</b></td><td className="num" style={R}><b>{fmt(r.total)}</b></td></tr>
         </tfoot>
@@ -79,9 +122,17 @@ export function CompareTable({ r }: { r: RequestRow }) {
   const items = itemsOf(r);
   const comps = r.comparisons || [];
   const n = items.length;
-  const cell = (price: number, disc: string, net: number) => (
+  const aw = awardsOf(r, items);
+  const rate = r.vat_rate || 0.07;
+  const line1 = items.map((it) => it.line_total ?? r2(netOf(it) * it.qty));
+  const sub1 = r2(line1.reduce((s, x) => s + x, 0));
+  const lineOf = (v: number, k: number) => (v === 0 ? line1[k] : boughtLine(r, items[k], k, v, n).line);
+  const byVendor = [0, ...comps.map((_, i) => i + 1)].map((v) => r2(items.reduce((s, _, k) => s + (aw[k] === v ? lineOf(v, k) : 0), 0)));
+  const cell = (price: number, disc: string, net: number, line: number, won: boolean) => (
     <>
       {disc ? <><span className="note">{fmt(price)} ลด {disc}</span><br /><b>{fmt(net)}</b></> : fmt(price)}
+      <div className="note">= {fmt(line)}</div>
+      {won && <div style={{ color: 'var(--sage-ink)', fontWeight: 700 }}>✓ สั่งซื้อ</div>}
     </>
   );
   return (
@@ -92,35 +143,48 @@ export function CompareTable({ r }: { r: RequestRow }) {
             <th style={{ width: 36 }}>#</th>
             <th>สินค้า · Item</th>
             <th style={R}>จำนวน</th>
-            <th className="sel" style={R}>{r.vendor} ✓</th>
-            {comps.map((c, i) => <th key={i} style={R}>{c.vendor}</th>)}
+            <th className="sel" style={R}>เจ้าที่ 1 · {r.vendor}</th>
+            {comps.map((c, i) => <th key={i} style={R}>เจ้าที่ {i + 2} · {c.vendor}</th>)}
           </tr>
         </thead>
         <tbody>
           {items.map((it, k) => (
             <tr key={k}>
               <td className="note">{k + 1}</td>
-              <td><span className="mono" style={{ fontSize: 12 }}>{it.sku}</span> · {it.product_name}</td>
+              <td>
+                <span className="mono" style={{ fontSize: 12 }}>{it.sku}</span> · {it.product_name}
+                {it.award_reason && <div className="note" style={{ color: 'var(--bad)' }}>ไม่ใช่ราคาต่ำสุด: {it.award_reason}</div>}
+              </td>
               <td className="num" style={{ ...R, whiteSpace: 'nowrap' }}>{fmtQty(it.qty)} {it.unit}</td>
-              <td className="num sel" style={R}>{cell(it.unit_price, normDiscount(it.discount), netOf(it))}</td>
-              {comps.map((c, i) => <td key={i} className="num" style={R}>{cell(compPrices(c)[k] || 0, compDiscounts(c, n)[k], compNets(c, n)[k])}</td>)}
+              <td className={`num sel${aw[k] === 0 ? ' won' : ''}`} style={R}>{cell(it.unit_price, normDiscount(it.discount), netOf(it), line1[k], aw[k] === 0)}</td>
+              {comps.map((c, i) => (
+                <td key={i} className={`num${aw[k] === i + 1 ? ' won' : ''}`} style={R}>
+                  {cell(compPrices(c)[k] || 0, compDiscounts(c, n)[k], compNets(c, n)[k], lineOf(i + 1, k), aw[k] === i + 1)}
+                </td>
+              ))}
             </tr>
           ))}
         </tbody>
         <tfoot>
           <tr>
             <td colSpan={3}>มูลค่ารวม ก่อน VAT · Subtotal</td>
-            <td className="num sel" style={R}>{fmt(r.subtotal)}</td>
+            <td className="num sel" style={R}>{fmt(sub1)}</td>
             {comps.map((c, i) => <td key={i} className="num" style={R}>{c.subtotal != null ? fmt(c.subtotal) : '—'}</td>)}
           </tr>
           <tr>
             <td colSpan={3}><b>รวม VAT · Total</b></td>
-            <td className="num sel" style={R}><b>{fmt(r.total)}</b></td>
+            <td className="num sel" style={R}><b>{fmt(r2(sub1 + r2(sub1 * rate)))}</b></td>
             {comps.map((c, i) => <td key={i} className="num" style={R}><b>{c.total != null ? fmt(c.total) : '—'}</b></td>)}
           </tr>
           <tr>
+            <td colSpan={3}><b>สั่งซื้อตาม ✓ (ก่อน VAT)</b></td>
+            {byVendor.map((v, i) => (
+              <td key={i} className={`num${i === 0 ? ' sel' : ''}`} style={{ ...R, fontWeight: 600, color: v > 0 ? 'var(--sage-ink)' : 'var(--muted)' }}>{v > 0 ? `✓ ${fmt(v)}` : '—'}</td>
+            ))}
+          </tr>
+          <tr>
             <td colSpan={3}>ส่วนต่าง · Difference</td>
-            <td className="sel" style={R}>ผู้ขายที่เลือก</td>
+            <td className="sel" style={R}>เทียบกับเจ้าที่ 1</td>
             {comps.map((c, i) => (
               <td key={i} className="num" style={{ ...R, fontWeight: 600, color: (c.diff || 0) >= 0 ? 'var(--sage-ink)' : 'var(--bad)' }}>
                 {c.diff != null ? `${c.diff >= 0 ? '+' : '−'}${fmt(Math.abs(c.diff))}` : '—'}
@@ -141,6 +205,11 @@ export function CompareTable({ r }: { r: RequestRow }) {
             <td colSpan={3}>Lead time</td>
             <td className="sel" style={R}>{daysText(r.lead_days)}</td>
             {comps.map((c, i) => <td key={i} style={R}>{daysText(c.lead_days)}</td>)}
+          </tr>
+          <tr>
+            <td colSpan={3}>สถานที่จัดส่งสินค้า · Delivery</td>
+            <td className="sel" style={R}><DeliveryText list={r.delivery} /></td>
+            {comps.map((c, i) => <td key={i} style={R}><DeliveryText list={c.delivery} /></td>)}
           </tr>
         </tfoot>
       </table>

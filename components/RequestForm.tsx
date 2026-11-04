@@ -1,10 +1,11 @@
 'use client';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useApp } from './AppProvider';
 import { ApprovalDoc } from './ApprovalDoc';
 import { Loading, Modal, PageHead } from './ui';
 import { blankComp, blankItem, calcItems, compDiscounts, compPrices, itemsOf, parseDays, type DraftComp, type DraftItem } from '@/lib/calc';
+import type { DeliverySlot } from '@/lib/types';
 import { PURP, SUBJ, SUBJ_EN, UNITS, fileSize, fmt, num } from '@/lib/format';
 import type { ApproverPreview, LineItem, Product, RequestFile, RequestRow, RequestStep } from '@/lib/types';
 
@@ -25,6 +26,7 @@ interface Draft {
   warranty: string;
   report_no: string;
   report_date: string;
+  delivery: DeliverySlot[];
   quote_no: string;
   quote_date: string;
   details: string;
@@ -77,7 +79,12 @@ function parsePasted(text: string): DraftItem[] {
 
 export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string | null; copyFrom?: string | null; forUser?: string | null }) {
   const app = useApp();
-  const { sb, me, settings, departments, companies, people, positions, run, toast, deptTh, has, name } = app;
+  const { sb, me, settings, departments, companies, people, positions, places, run, toast, deptTh, has, name } = app;
+  /** the two delivery boxes of a vendor: slot 1 (โรงงาน …) and slot 2 (คลัง …), unticked */
+  const blankDelivery = useCallback(
+    (): DeliverySlot[] => [1, 2].map((slot) => ({ place: places.find((p) => p.slot === slot && p.active)?.name || '', on: false })),
+    [places],
+  );
   const router = useRouter();
   const vatRate = settings?.vat_rate ?? 0.07;
   const isAdmin = has('admin');
@@ -88,11 +95,11 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
       subject_type: 'general', items: [blankItem()],
       dept: (forUser && people[forUser]?.dept) || me?.dept || departments[0]?.id || '', purpose: 'replace', buyer_id: '',
       company_id: companies.find((c) => c.active)?.id || '', vendor: '', quote_no: '', quote_date: today(),
-      credit_days: '', lead_days: '', warranty: '', report_no: '', report_date: '',
-      details: '', comps: [blankComp(1), blankComp(1)],
+      credit_days: '', lead_days: '', warranty: '', report_no: '', report_date: '', delivery: blankDelivery(),
+      details: '', comps: [{ ...blankComp(1), delivery: blankDelivery() }, { ...blankComp(1), delivery: blankDelivery() }],
       no_comp: false, no_comp_reason: '', low_reason: '',
     }),
-    [me?.id, me?.dept, departments, companies, has, forUser, people],
+    [me?.id, me?.dept, departments, companies, has, forUser, people, blankDelivery],
   );
 
   const [id, setId] = useState<string | null>(draftId || null);
@@ -128,12 +135,14 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
       }
       const its = itemsOf(r);
       const items: DraftItem[] = its.length
-        ? its.map((it) => ({ sku: it.sku, description: it.description || '', qty: String(it.qty || 1), unit: it.unit || 'ชิ้น', unit_price: money(it.unit_price), discount: it.discount || '', prev_price: it.prev_price != null ? fmt(it.prev_price) : '', prev_vendor: it.prev_vendor || '', prev_date: it.prev_date || '', brand: it.brand || '', report_no: it.report_no || '' }))
+        ? its.map((it) => ({ sku: it.sku, description: it.description || '', qty: String(it.qty || 1), unit: it.unit || 'ชิ้น', unit_price: money(it.unit_price), discount: it.discount || '', prev_price: it.prev_price != null ? fmt(it.prev_price) : '', prev_vendor: it.prev_vendor || '', prev_date: it.prev_date || '', brand: it.brand || '', report_no: it.report_no || '',
+            // keep a ✓ only where it differs from the automatic (cheapest) one
+            award: it.award != null && it.award !== it.award_auto ? it.award : null, award_reason: it.award_reason || '' }))
         : [blankItem()];
       const comps: DraftComp[] = (r.comparisons || []).map((c) => {
         const ps = compPrices(c);
         const ds = compDiscounts(c, items.length);
-        return { vendor: c.vendor, prices: items.map((_, k) => money(ps[k])), discounts: ds, credit_days: c.credit_days != null ? String(c.credit_days) : '', lead_days: c.lead_days != null ? String(c.lead_days) : '', warranty: c.warranty || '' };
+        return { vendor: c.vendor, prices: items.map((_, k) => money(ps[k])), discounts: ds, credit_days: c.credit_days != null ? String(c.credit_days) : '', lead_days: c.lead_days != null ? String(c.lead_days) : '', warranty: c.warranty || '', delivery: fixDelivery(c.delivery) };
       });
       const keepPreparer = draftId || r.preparer_id === me?.id || isAdmin;
       setD({
@@ -142,7 +151,8 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
         buyer_id: r.buyer_id || '', company_id: r.company_id || '', vendor: r.vendor,
         quote_no: copyFrom ? '' : r.quote_no, quote_date: copyFrom ? today() : r.quote_date || today(),
         details: r.details,
-        comps: comps.length ? comps : [blankComp(items.length)],
+        comps: comps.length ? comps : [{ ...blankComp(items.length), delivery: blankDelivery() }],
+        delivery: fixDelivery(r.delivery),
         credit_days: r.credit_days != null ? String(r.credit_days) : '', lead_days: r.lead_days != null ? String(r.lead_days) : '', warranty: r.warranty || '',
         report_no: copyFrom ? '' : r.report_no || '', report_date: copyFrom ? '' : r.report_date || '',
         no_comp: r.no_comp, no_comp_reason: r.no_comp_reason, low_reason: r.low_reason,
@@ -157,6 +167,23 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
   }, [draftId, copyFrom, sb, me?.id, router, toast]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setD((x) => (x ? { ...x, [k]: v } : x));
+  /** a vendor's delivery boxes, always two, empty places filled from the settings list */
+  function fixDelivery(list?: DeliverySlot[] | null): DeliverySlot[] {
+    const base = blankDelivery();
+    return base.map((b, i) => ({ place: list?.[i]?.place || b.place, on: !!list?.[i]?.on }));
+  }
+  // the delivery place list arrives after the first render: fill boxes that are still empty
+  useEffect(() => {
+    if (!places.length) return;
+    setD((x) => (x ? { ...x, delivery: fixDelivery(x.delivery), comps: x.comps.map((cp) => ({ ...cp, delivery: fixDelivery(cp.delivery) })) } : x));
+  }, [places]); // eslint-disable-line react-hooks/exhaustive-deps
+  const setDelivery = (v: number, slot: number, patch: Partial<DeliverySlot>) =>
+    setD((x) => {
+      if (!x) return x;
+      const upd = (list: DeliverySlot[]) => fixDelivery(list).map((s0, i) => (i === slot ? { ...s0, ...patch } : s0));
+      if (v === 0) return { ...x, delivery: upd(x.delivery) };
+      return { ...x, comps: x.comps.map((cp, j) => (j === v - 1 ? { ...cp, delivery: upd(cp.delivery) } : cp)) };
+    });
   const setItem = (i: number, patch: Partial<DraftItem>) =>
     setD((x) => (x ? { ...x, items: x.items.map((it, j) => (j === i ? { ...it, ...patch } : it)) } : x));
   const addItems = (list: DraftItem[], at?: number) =>
@@ -180,6 +207,21 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
     setD((x) => (x && x.items.length > 1 ? { ...x, items: x.items.filter((_, j) => j !== i), comps: x.comps.map((c) => ({ ...c, prices: c.prices.filter((_, j) => j !== i), discounts: c.discounts.filter((_, j) => j !== i) })) } : x));
   const setPrice = (ci: number, k: number, v: string, field: 'prices' | 'discounts' = 'prices') =>
     setD((x) => (x ? { ...x, comps: x.comps.map((c, j) => (j === ci ? { ...c, [field]: c[field].map((p, m) => (m === k ? v : p)) } : c)) } : x));
+  /** tick ✓ vendor v for item k (back to the cheapest = automatic, no reason needed) */
+  const setAward = (k: number, v: number, best: number) =>
+    setD((x) => (x ? { ...x, items: x.items.map((it, j) => (j === k ? { ...it, award: v === best ? null : v } : it)) } : x));
+  /** remove comparison vendor ci; ✓ that pointed at later vendors shift with them */
+  const removeComp = (ci: number) =>
+    setD((x) => {
+      if (!x) return x;
+      const v = ci + 1;
+      return {
+        ...x,
+        comps: x.comps.filter((_, j) => j !== ci),
+        items: x.items.map((it) => (it.award == null ? it : it.award === v ? { ...it, award: null, award_reason: '' } : it.award > v ? { ...it, award: it.award - 1 } : it)),
+      };
+    });
+  const addComp = () => setD((x) => (x ? { ...x, comps: [...x.comps, { ...blankComp(x.items.length), delivery: blankDelivery() }] } : x));
   const setComp = (ci: number, patch: Partial<DraftComp>) =>
     setD((x) => (x ? { ...x, comps: x.comps.map((c, j) => (j === ci ? { ...c, ...patch } : c)) } : x));
 
@@ -217,7 +259,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
     return () => clearTimeout(t);
   }, [activeSku, sb]);
 
-  const c = useMemo(() => calcItems(d?.items || [], vatRate, d?.comps || []), [d?.items, d?.comps, vatRate]);
+  const c = useMemo(() => calcItems(d?.items || [], vatRate, d?.comps || [], !!d?.no_comp), [d?.items, d?.comps, vatRate, d?.no_comp]);
 
   // who must approve this amount (same rule the server uses)
   useEffect(() => {
@@ -243,6 +285,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
   const proxy = d.preparer_id !== me.id;
   const preparers = Object.values(people).filter((p) => p.status === 'active' && p.roles.includes('preparer'));
 
+  const vendorName = (v: number) => (v === 0 ? d.vendor.trim() || 'ผู้ขาย 1' : d.comps[v - 1]?.vendor.trim() || `คู่เทียบ ${v}`);
   const missing: string[] = [];
   if (!d.preparer_id) missing.push('เลือกผู้จัดทำ · Choose the preparer');
   d.items.forEach((it, i) => {
@@ -268,7 +311,10 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
       if (!c.comps[i]?.complete) missing.push(`คู่เทียบ ${i + 1}: กรอกราคาต่อหน่วยให้ครบทุกรายการ และตรวจส่วนลด · Enter a price for every item and check discounts`);
       if (parseDays(x.credit_days).error || parseDays(x.lead_days).error) missing.push(`คู่เทียบ ${i + 1}: เครดิต / Lead time ต้องเป็นจำนวนวัน · Whole days only`);
     });
-    if (!c.lowest && !d.low_reason.trim()) missing.push('ระบุเหตุผลที่ไม่เลือกราคาต่ำสุด · Explain why not the lowest price');
+    c.awards.forEach((a, k) => {
+      if (a.override && !d.items[k].award_reason.trim())
+        missing.push(`รายการที่ ${k + 1}: ติ๊ก ✓ ${vendorName(a.pick)} ซึ่งไม่ใช่ราคาต่ำสุด ระบุเหตุผล · Give a reason for not buying the lowest price`);
+    });
   }
   if (!files.length) missing.push('แนบใบเสนอราคาอย่างน้อย 1 ไฟล์ · Attach at least one quotation file');
   approvers.filter((a) => a.sign_mode !== 'wet').forEach((a) => {
@@ -280,6 +326,9 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
       sku: skuKey(it.sku), product_name: nameOf(it), description: it.description.trim(),
       qty: c.lines[i].q, unit: it.unit, unit_price: c.lines[i].up, discount: it.discount.replace(/[\s,]/g, ''), prev_price: c.lines[i].prev,
       prev_vendor: it.prev_vendor.trim(), prev_date: it.prev_date || null, brand: it.brand.trim(), report_no: it.report_no.trim(),
+      // only a ✓ moved away from the cheapest vendor is stored; the server ticks the cheapest itself
+      award: c.awards[i]?.override ? c.awards[i].pick : null,
+      award_reason: c.awards[i]?.override ? it.award_reason.trim() : '',
     }));
   const row = () => {
     const items = rowItems();
@@ -309,10 +358,12 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
       comparisons: d.no_comp ? [] : d.comps.map((x) => ({
         vendor: x.vendor.trim(), prices: x.prices.map((p) => num(p)), discounts: x.discounts.map((v) => v.replace(/[\s,]/g, '')),
         credit_days: parseDays(x.credit_days).days, lead_days: parseDays(x.lead_days).days, warranty: x.warranty.trim(),
+        delivery: fixDelivery(x.delivery),
       })),
+      delivery: fixDelivery(d.delivery),
       no_comp: d.no_comp,
       no_comp_reason: d.no_comp ? d.no_comp_reason : '',
-      low_reason: d.low_reason,
+      low_reason: '',
       message,
     };
   };
@@ -403,9 +454,51 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
   }
 
   const online = approvers.filter((a) => a.sign_mode !== 'wet');
+
+  /** ✓ choice for item k in vendor column v (0 = ผู้ขายที่เลือก) */
+  const tick = (k: number, v: number, a: { best: number; pick: number }) => {
+    const ln = v === 0 ? c.lines[k] : c.comps[v - 1]?.lines[k];
+    const usable = !!ln && ln.up > 0 && !ln.discErr;
+    const on = a.pick === v;
+    return (
+      <label className={`award${on ? ' on' : ''}`} htmlFor={`aw${k}-${v}`}>
+        <input type="radio" name={`aw${k}`} id={`aw${k}-${v}`} checked={on} disabled={!usable && !on}
+          onChange={() => setAward(k, v, a.best)} />
+        {on ? '✓ สั่งซื้อ' : 'เลือก'}
+        {a.best === v && usable && <span className="low">ต่ำสุด</span>}
+      </label>
+    );
+  };
+  /** the two delivery boxes of vendor v: tick + place chosen from the settings list */
+  const deliveryCell = (v: number) => {
+    const list = fixDelivery(v === 0 ? d.delivery : d.comps[v - 1]?.delivery);
+    const who = vendorName(v);
+    return (
+      <div className="dlv">
+        {list.map((sl, i) => {
+          const act = places.filter((p) => p.active);
+          const opts = [...act.filter((p) => p.slot === i + 1), ...act.filter((p) => p.slot !== i + 1)].map((p) => p.name);
+          if (sl.place && !opts.includes(sl.place)) opts.unshift(sl.place);
+          return (
+            <div key={i} className="dlv-slot">
+              <input type="checkbox" id={`dv${v}-${i}`} checked={sl.on} aria-label={`จัดส่งที่ ${sl.place || `ช่อง ${i + 1}`} · ${who}`}
+                onChange={(e) => setDelivery(v, i, { on: e.target.checked })} />
+              <select className="in" id={`dp${v}-${i}`} aria-label={`สถานที่จัดส่ง ช่อง ${i + 1} · ${who}`} value={sl.place}
+                onChange={(e) => setDelivery(v, i, { place: e.target.value })}>
+                <option value="">— ไม่ระบุ —</option>
+                {opts.map((o) => <option key={o} value={o}>{o}</option>)}
+              </select>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
   const previewRow: RequestRow = {
     id: id || 'draft', no, status: 'draft', preparer_id: d.preparer_id || me.id, created_by: me.id, subject_type: d.subject_type,
-    items: rowItems().map((it, i) => ({ ...it, product_name: it.product_name || '[ชื่อสินค้า]', net_price: c.lines[i].net, line_total: c.lines[i].line, prev_diff_pct: c.lines[i].pct })),
+    items: rowItems().map((it, i) => ({ ...it, product_name: it.product_name || '[ชื่อสินค้า]', net_price: c.lines[i].net, line_total: c.lines[i].line, prev_diff_pct: c.lines[i].pct,
+      award: c.awards[i].pick, award_auto: c.awards[i].best, award_line: c.awards[i].line, award_reason: c.awards[i].override ? d.items[i].award_reason : '' })),
+    delivery: fixDelivery(d.delivery),
     credit_days: parseDays(d.credit_days).days, lead_days: parseDays(d.lead_days).days, warranty: d.warranty, report_no: d.report_no, report_date: d.report_date || null,
     sku: skuKey(d.items[0].sku), product_name: summaryName, qty: n === 1 ? c.lines[0].q : n, unit: n === 1 ? d.items[0].unit : 'รายการ',
     unit_price: n === 1 ? c.lines[0].net : 0, subtotal: c.sub, vat: c.vat, total: c.total, vat_rate: vatRate, dept: d.dept, purpose: d.purpose,
@@ -415,8 +508,9 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
       vendor: x.vendor, prices: x.lines.map((l) => l.up), discounts: d.comps[ci].discounts, nets: x.lines.map((l) => l.net),
       lines: x.lines.map((l) => l.line), subtotal: x.sub, total: x.total, diff: x.diff,
       credit_days: parseDays(d.comps[ci].credit_days).days, lead_days: parseDays(d.comps[ci].lead_days).days, warranty: d.comps[ci].warranty,
+      delivery: fixDelivery(d.comps[ci].delivery),
     })),
-    no_comp: d.no_comp, no_comp_reason: d.no_comp_reason, low_reason: c.lowest ? '' : d.low_reason, message,
+    no_comp: d.no_comp, no_comp_reason: d.no_comp_reason, low_reason: '', message,
     sign_plan: [...positions].sort((a, b) => a.sort - b.sort).map((p) => {
       const a = approvers.find((x) => x.pos === p.code);
       if (!a) return { position: p.code, mode: 'skip' as const };
@@ -626,12 +720,17 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
 
         <h2>จำนวนเงิน · Amount</h2>
         <div className="grid">
-          <div className="f" style={{ fontSize: 14, fontWeight: 500 }}>มูลค่ารวม ก่อน VAT · Subtotal<div className="ro">{fmt(c.sub)}</div></div>
+          <div className="f" style={{ fontSize: 14, fontWeight: 500 }}>ยอดที่ขออนุมัติ ก่อน VAT (ตามที่ติ๊ก ✓) · Subtotal<div className="ro">{fmt(c.sub)}</div></div>
           <div className="f" style={{ fontSize: 14, fontWeight: 500 }}>VAT {Math.round(vatRate * 100)}%<div className="ro" style={{ fontWeight: 400 }}>{fmt(c.vat)}</div></div>
           <div className="f" style={{ fontSize: 14, fontWeight: 500 }}>ยอดรวมสุทธิ (บาท) · Net total<div className="ro" style={{ fontSize: 17 }}>{fmt(c.total)}</div></div>
         </div>
         <div className="box num" style={{ borderStyle: 'solid', borderColor: 'var(--beige)' }}>
           {n} รายการ = <b>{fmt(c.sub)}</b> + VAT {fmt(c.vat)} = <b>{fmt(c.total)} บาท</b>
+          {c.byVendor.filter((v) => v > 0).length > 1 && (
+            <div className="note" style={{ marginTop: 4 }}>
+              แยกซื้อ · split: {c.byVendor.map((v, i) => (v > 0 ? `${vendorName(i)} ${fmt(v)}` : '')).filter(Boolean).join(' · ')}
+            </div>
+          )}
         </div>
 
         <div className="card" style={{ background: 'var(--soft)', borderColor: 'var(--tan)', padding: 16 }}>
@@ -666,14 +765,17 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
             เหตุผลที่ไม่มีคู่เทียบ (บังคับ) · Reason for no comparison (required) <span className="req">*</span>
             <textarea className="in" id="f-ncr" value={d.no_comp_reason} onChange={(e) => set('no_comp_reason', e.target.value)} placeholder="เช่น ผู้ขายรายเดียวที่เป็นตัวแทนจำหน่าย · e.g. sole authorised distributor" />
           </label>
+        ) : null}
+        {d.no_comp ? (
+          <div className="f" style={{ fontSize: 14, fontWeight: 500 }}>สถานที่จัดส่งสินค้า · Delivery{deliveryCell(0)}</div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <div className="actions">
               <span className="note">กรอกราคาต่อหน่วยก่อน VAT และส่วนลด (ถ้ามี) ของผู้ขายแต่ละรายทุกรายการ ระบบคำนวณราคาสุทธิ × จำนวน และรวมยอดให้ · Enter each vendor&apos;s unit price and discount per item; net price × quantity is totalled</span>
               <span className="row" style={{ gap: 8, alignItems: 'center' }}>
-                <button type="button" className="icon-btn" onClick={() => set('comps', d.comps.slice(0, -1))} aria-label="ลดคู่เทียบ · Remove a vendor" disabled={!d.comps.length}>−</button>
+                <button type="button" className="icon-btn" onClick={() => removeComp(d.comps.length - 1)} aria-label="ลดคู่เทียบ · Remove a vendor" disabled={!d.comps.length}>−</button>
                 <b className="num">{d.comps.length}</b>
-                <button type="button" className="icon-btn" style={{ background: 'var(--brown)', color: '#fff', borderColor: 'var(--brown)' }} onClick={() => set('comps', [...d.comps, blankComp(d.items.length)])} aria-label="เพิ่มคู่เทียบ · Add a vendor">+</button>
+                <button type="button" className="icon-btn" style={{ background: 'var(--brown)', color: '#fff', borderColor: 'var(--brown)' }} onClick={addComp} aria-label="เพิ่มคู่เทียบ · Add a vendor">+</button>
               </span>
             </div>
             <div className="tw">
@@ -683,31 +785,35 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
                     <th style={{ width: 36 }}>#</th>
                     <th>สินค้า · Item</th>
                     <th style={{ textAlign: 'right' }}>จำนวน</th>
-                    <th className="sel" style={{ textAlign: 'right' }}>ผู้ขายที่เลือก ✓<br /><span style={{ fontWeight: 600, color: 'var(--ink)' }}>{d.vendor || '—'}</span></th>
+                    <th className="sel" style={{ textAlign: 'right' }}>เจ้าที่ 1 · ผู้ขายหลัก<br /><span style={{ fontWeight: 600, color: 'var(--ink)' }}>{d.vendor || '—'}</span></th>
                     {d.comps.map((x, ci) => (
                       <th key={ci}>
                         <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
                           <input className="in" id={`cn${ci}`} aria-label={`ชื่อผู้ขายคู่เทียบ ${ci + 1} · Vendor`} placeholder={`คู่เทียบ ${ci + 1} · Vendor`} value={x.vendor}
                             onChange={(e) => set('comps', d.comps.map((y, j) => (j === ci ? { ...y, vendor: e.target.value } : y)))} />
-                          <button type="button" className="icon-btn" style={{ width: 36, height: 36, flex: 'none', color: 'var(--bad)' }} onClick={() => set('comps', d.comps.filter((_, j) => j !== ci))} aria-label={`ลบคู่เทียบ ${ci + 1} · Remove`}>✕</button>
+                          <button type="button" className="icon-btn" style={{ width: 36, height: 36, flex: 'none', color: 'var(--bad)' }} onClick={() => removeComp(ci)} aria-label={`ลบคู่เทียบ ${ci + 1} · Remove`}>✕</button>
                         </div>
                       </th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {d.items.map((it, k) => (
-                    <tr key={k}>
+                  {d.items.map((it, k) => {
+                    const a = c.awards[k];
+                    return (
+                    <Fragment key={k}>
+                    <tr>
                       <td className="note">{k + 1}</td>
                       <td><span className="mono" style={{ fontSize: 12 }}>{skuKey(it.sku) || '—'}</span><br />{nameOf(it) || <span className="note">—</span>}</td>
                       <td className="num" style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>{it.qty} {it.unit}</td>
-                      <td className="num sel" style={{ textAlign: 'right' }}>
+                      <td className={`num sel${a.pick === 0 ? ' won' : ''}`} style={{ textAlign: 'right' }}>
                         {fmt(c.lines[k].up)}
                         {c.lines[k].hasDisc && <div className="note">ลด {normDisc(it.discount)} → {fmt(c.lines[k].net)}</div>}
                         <div className="note">= {fmt(c.lines[k].line)}</div>
+                        {tick(k, 0, a)}
                       </td>
                       {d.comps.map((x, ci) => (
-                        <td key={ci}>
+                        <td key={ci} className={a.pick === ci + 1 ? 'won' : undefined}>
                           <input className="in r" inputMode="decimal" id={`cp${ci}-${k}`} aria-label={`ราคาต่อหน่วย ${x.vendor || `คู่เทียบ ${ci + 1}`} รายการที่ ${k + 1}`} value={x.prices[k] ?? ''} placeholder="0.00"
                             onChange={(e) => setPrice(ci, k, e.target.value)}
                             onBlur={() => { const v = num(x.prices[k]); if (v > 0) setPrice(ci, k, fmt(v)); }}
@@ -719,24 +825,47 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
                           <div className="note num" style={{ textAlign: 'right', color: c.comps[ci]?.lines[k]?.discErr ? 'var(--bad)' : undefined }}>
                             {c.comps[ci]?.lines[k]?.discErr || <>{c.comps[ci]?.lines[k]?.hasDisc && <>สุทธิ {fmt(c.comps[ci]?.lines[k]?.net)} · </>}= {fmt(c.comps[ci]?.lines[k]?.line)}</>}
                           </div>
+                          {tick(k, ci + 1, a)}
                         </td>
                       ))}
                     </tr>
-                  ))}
+                    {a.override && (
+                      <tr className="why">
+                        <td />
+                        <td colSpan={3 + d.comps.length}>
+                          <label className="f" htmlFor={`ar${k}`} style={{ color: 'var(--bad)' }}>
+                            รายการที่ {k + 1}: ซื้อจาก {vendorName(a.pick)} ซึ่งไม่ใช่ราคาต่ำสุด ({vendorName(a.best)} ถูกกว่า {fmt(a.line - (a.best === 0 ? c.lines[k].line : c.comps[a.best - 1].lines[k].line))} บาท) ระบุเหตุผล · Reason <span className="req">*</span>
+                            <input className="in" id={`ar${k}`} value={it.award_reason} maxLength={500} placeholder="เช่น ราคาใกล้เคียงแต่ส่งของเร็วกว่า / รับประกันนานกว่า"
+                              onChange={(e) => setItem(k, { award_reason: e.target.value })} />
+                          </label>
+                        </td>
+                      </tr>
+                    )}
+                    </Fragment>
+                    );
+                  })}
                 </tbody>
                 <tfoot>
                   <tr>
                     <td colSpan={3}>มูลค่ารวม ก่อน VAT · Subtotal</td>
-                    <td className="num sel" style={{ textAlign: 'right' }}>{fmt(c.sub)}</td>
+                    <td className="num sel" style={{ textAlign: 'right' }}>{fmt(c.q1Sub)}</td>
                     {c.comps.map((x, ci) => <td key={ci} className="num" style={{ textAlign: 'right' }}>{fmt(x.sub)}</td>)}
                   </tr>
                   <tr>
                     <td colSpan={3}><b>รวม VAT · Total</b></td>
-                    <td className="num sel" style={{ textAlign: 'right' }}><b>{fmt(c.total)}</b></td>
+                    <td className="num sel" style={{ textAlign: 'right' }}><b>{fmt(c.q1Total)}</b></td>
                     {c.comps.map((x, ci) => <td key={ci} className="num" style={{ textAlign: 'right' }}><b>{fmt(x.total)}</b></td>)}
                   </tr>
                   <tr>
-                    <td colSpan={3}>ส่วนต่างจากผู้ขายที่เลือก · Difference</td>
+                    <td colSpan={3}><b>สั่งซื้อตาม ✓ (ก่อน VAT)</b> · Ticked lines</td>
+                    {c.byVendor.map((v, i) => (
+                      <td key={i} className={`num${i === 0 ? ' sel' : ''}`} style={{ textAlign: 'right', fontWeight: 600, color: v > 0 ? 'var(--sage-ink)' : 'var(--muted)' }}>
+                        {v > 0 ? <>✓ {fmt(v)}<div className="note">{c.awards.filter((a) => a.pick === i).length} รายการ</div></> : '—'}
+                      </td>
+                    ))}
+                  </tr>
+                  <tr>
+                    <td colSpan={3}>ส่วนต่างจากเจ้าที่ 1 · Difference</td>
                     <td className="sel" style={{ textAlign: 'right' }}>—</td>
                     {c.comps.map((x, ci) => (
                       <td key={ci} className="num" style={{ textAlign: 'right', fontWeight: 600, color: !x.complete ? 'var(--muted)' : x.diff >= 0 ? 'var(--sage-ink)' : 'var(--bad)' }}>
@@ -768,16 +897,16 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
                         aria-invalid={!!parseDays(x.lead_days).error} onChange={(e) => setComp(ci, { lead_days: e.target.value })} /></td>
                     ))}
                   </tr>
+                  <tr>
+                    <td colSpan={3}>สถานที่จัดส่งสินค้า · Delivery</td>
+                    <td className="sel">{deliveryCell(0)}</td>
+                    {d.comps.map((_, ci) => <td key={ci}>{deliveryCell(ci + 1)}</td>)}
+                  </tr>
                 </tfoot>
               </table>
             </div>
-            {c.lowest ? (
-              c.minC != null && <div className="ok-box" style={{ color: 'var(--sage-ink)' }}>✓ ผู้ขายที่เลือกราคาต่ำสุด ถูกกว่าคู่เทียบที่ใกล้ที่สุด {fmt(c.minC - c.total)} บาท · Lowest price</div>
-            ) : (
-              <label className="f bad-box" htmlFor="f-low" style={{ color: 'var(--bad)' }}>
-                ผู้ขายที่เลือกไม่ใช่ราคาต่ำสุด ระบุเหตุผล · Not the lowest price, give a reason <span className="req">*</span>
-                <textarea className="in" id="f-low" value={d.low_reason} onChange={(e) => set('low_reason', e.target.value)} />
-              </label>
+            {c.awards.some((a) => a.override) ? null : c.comps.length > 0 && c.comps.every((x) => x.complete) && (
+              <div className="ok-box" style={{ color: 'var(--sage-ink)' }}>✓ ทุกรายการสั่งซื้อจากผู้ขายที่ราคาต่ำสุด · Every item from the lowest price</div>
             )}
           </div>
         )}

@@ -2,7 +2,7 @@
 import { useEffect, useLayoutEffect, useRef } from 'react';
 import { useApp } from './AppProvider';
 import { compDiscounts, compNets, compPrices, itemsOf, netOf, normDiscount } from '@/lib/calc';
-import { dOnly, r2 } from '@/lib/format';
+import { dOnly, fmt, r2 } from '@/lib/format';
 import { renderSheet, type SheetData, type SheetSigner, type SheetVendor } from '@/lib/compareSheet';
 import type { RequestRow, RequestStep } from '@/lib/types';
 
@@ -13,20 +13,26 @@ export function useSheetData(r: RequestRow, steps: RequestStep[], draft: boolean
   const items = itemsOf(r);
   const n = items.length;
   const comps = r.no_comp ? [] : r.comparisons || [];
+  const rate = r.vat_rate || 0.07;
+  // vendor ticked ✓ per item (older requests: everything from เจ้าที่ 1)
+  const award = items.map((it) => (it.award != null && it.award >= 0 && it.award <= comps.length ? it.award : 0));
 
+  const line1 = items.map((it) => it.line_total ?? r2(netOf(it) * it.qty));
+  // เจ้าที่ 1's whole quotation (r.subtotal is the amount approved = the ✓ lines)
+  const sub1 = r2(line1.reduce((s, x) => s + x, 0));
   const selected: SheetVendor = {
     name: r.vendor,
-    selected: true,
     unit: items.map((it) => it.unit_price),
     disc: items.map((it) => normDiscount(it.discount)),
     net: items.map((it) => netOf(it)),
-    line: items.map((it) => it.line_total ?? r2(netOf(it) * it.qty)),
-    subtotal: r.subtotal,
-    vat: r.vat,
-    total: r.total,
+    line: line1,
+    subtotal: sub1,
+    vat: r2(sub1 * rate),
+    total: r2(sub1 + r2(sub1 * rate)),
     warranty: r.warranty || '',
     leadDays: r.lead_days ?? null,
     creditDays: r.credit_days ?? null,
+    delivery: r.delivery || [],
   };
   const others: SheetVendor[] = comps.map((c) => {
     const net = compNets(c, n);
@@ -45,7 +51,13 @@ export function useSheetData(r: RequestRow, steps: RequestStep[], draft: boolean
       warranty: c.warranty || '',
       leadDays: c.lead_days ?? null,
       creditDays: c.credit_days ?? null,
+      delivery: c.delivery || [],
     };
+  });
+  const vendors = [selected, ...others];
+  vendors.forEach((v, vi) => {
+    v.awarded = r2(award.reduce((s, a, k) => s + (a === vi ? v.line[k] : 0), 0));
+    v.selected = v.awarded > 0;
   });
 
   const ordered = [...steps].sort((a, b) => a.step_no - b.step_no);
@@ -85,6 +97,14 @@ export function useSheetData(r: RequestRow, steps: RequestStep[], draft: boolean
   if (r.details?.trim()) notes.push(`วัตถุประสงค์ / รายละเอียด: ${r.details.trim()}`);
   if (r.no_comp) notes.push(`ไม่มีคู่เทียบ เหตุผล: ${r.no_comp_reason}`);
   if (r.low_reason) notes.push(`เหตุผลที่ไม่เลือกราคาต่ำสุด: ${r.low_reason}`);
+  if (comps.length) {
+    const split = vendors.filter((v) => v.awarded).length > 1;
+    notes.push(`ยอดที่ขออนุมัติ (ตามรายการที่ติ๊ก ✓${split ? ' แยกซื้อหลายเจ้า' : ''}): ${fmt(r.total)} บาท รวม VAT`);
+  }
+  items.forEach((it, k) => {
+    if (it.award_reason?.trim())
+      notes.push(`รายการที่ ${k + 1}${it.sku ? ` (${it.sku})` : ''}: ซื้อเจ้าที่ ${award[k] + 1} ${vendors[award[k]]?.name || ''} — ${it.award_reason.trim()}`);
+  });
 
   return {
     logoUrl: logoUrl(co),
@@ -98,7 +118,7 @@ export function useSheetData(r: RequestRow, steps: RequestStep[], draft: boolean
       ['ฝ่ายที่ขอซื้อ', deptTh(r.dept)],
     ],
     rev,
-    items: items.map((it) => ({
+    items: items.map((it, k) => ({
       sku: it.sku,
       name: it.product_name || '',
       description: it.description || '',
@@ -109,9 +129,10 @@ export function useSheetData(r: RequestRow, steps: RequestStep[], draft: boolean
       prevVendor: it.prev_vendor || '',
       prevDate: it.prev_date || null,
       reportNo: it.report_no || '',
+      award: award[k],
     })),
-    vendors: [selected, ...others],
-    vatRate: r.vat_rate || 0.07,
+    vendors,
+    vatRate: rate,
     notes,
     signers: [
       ...approvers.reverse(),
