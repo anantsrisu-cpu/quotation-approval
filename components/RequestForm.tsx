@@ -571,7 +571,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
               {Object.keys(PURP).map((k) => <option key={k} value={k}>{PURP[k]}</option>)}
             </select>
           </label>
-          <label className="f" htmlFor="f-vendor">ชื่อผู้ขายที่เลือก · Selected vendor <span className="req">*</span>
+          <label className="f" htmlFor="f-vendor">ชื่อผู้ขาย เจ้าที่ 1 (ใบเสนอราคาหลัก) · Main vendor <span className="req">*</span>
             <input className="in" id="f-vendor" value={d.vendor} onChange={(e) => set('vendor', e.target.value)} />
           </label>
           <div className="grid" style={{ gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: 10 }}>
