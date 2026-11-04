@@ -23,6 +23,8 @@ interface Draft {
   credit_days: string;
   lead_days: string;
   warranty: string;
+  report_no: string;
+  report_date: string;
   quote_no: string;
   quote_date: string;
   details: string;
@@ -86,7 +88,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
       subject_type: 'general', items: [blankItem()],
       dept: (forUser && people[forUser]?.dept) || me?.dept || departments[0]?.id || '', purpose: 'replace', buyer_id: '',
       company_id: companies.find((c) => c.active)?.id || '', vendor: '', quote_no: '', quote_date: today(),
-      credit_days: '', lead_days: '', warranty: '',
+      credit_days: '', lead_days: '', warranty: '', report_no: '', report_date: '',
       details: '', comps: [blankComp(1), blankComp(1)],
       no_comp: false, no_comp_reason: '', low_reason: '',
     }),
@@ -126,7 +128,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
       }
       const its = itemsOf(r);
       const items: DraftItem[] = its.length
-        ? its.map((it) => ({ sku: it.sku, description: it.description || '', qty: String(it.qty || 1), unit: it.unit || 'ชิ้น', unit_price: money(it.unit_price), discount: it.discount || '', prev_price: it.prev_price != null ? fmt(it.prev_price) : '', prev_vendor: it.prev_vendor || '', prev_date: it.prev_date || '', brand: it.brand || '' }))
+        ? its.map((it) => ({ sku: it.sku, description: it.description || '', qty: String(it.qty || 1), unit: it.unit || 'ชิ้น', unit_price: money(it.unit_price), discount: it.discount || '', prev_price: it.prev_price != null ? fmt(it.prev_price) : '', prev_vendor: it.prev_vendor || '', prev_date: it.prev_date || '', brand: it.brand || '', report_no: it.report_no || '' }))
         : [blankItem()];
       const comps: DraftComp[] = (r.comparisons || []).map((c) => {
         const ps = compPrices(c);
@@ -142,6 +144,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
         details: r.details,
         comps: comps.length ? comps : [blankComp(items.length)],
         credit_days: r.credit_days != null ? String(r.credit_days) : '', lead_days: r.lead_days != null ? String(r.lead_days) : '', warranty: r.warranty || '',
+        report_no: copyFrom ? '' : r.report_no || '', report_date: copyFrom ? '' : r.report_date || '',
         no_comp: r.no_comp, no_comp_reason: r.no_comp_reason, low_reason: r.low_reason,
       });
       if (draftId) {
@@ -276,7 +279,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
     d.items.map((it, i) => ({
       sku: skuKey(it.sku), product_name: nameOf(it), description: it.description.trim(),
       qty: c.lines[i].q, unit: it.unit, unit_price: c.lines[i].up, discount: it.discount.replace(/[\s,]/g, ''), prev_price: c.lines[i].prev,
-      prev_vendor: it.prev_vendor.trim(), prev_date: it.prev_date || null, brand: it.brand.trim(),
+      prev_vendor: it.prev_vendor.trim(), prev_date: it.prev_date || null, brand: it.brand.trim(), report_no: it.report_no.trim(),
     }));
   const row = () => {
     const items = rowItems();
@@ -294,6 +297,8 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
       credit_days: parseDays(d.credit_days).days,
       lead_days: parseDays(d.lead_days).days,
       warranty: d.warranty.trim(),
+      report_no: d.report_no.trim(),
+      report_date: d.report_date || null,
       purpose: d.purpose,
       buyer_id: d.buyer_id || null,
       company_id: d.company_id || null,
@@ -401,7 +406,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
   const previewRow: RequestRow = {
     id: id || 'draft', no, status: 'draft', preparer_id: d.preparer_id || me.id, created_by: me.id, subject_type: d.subject_type,
     items: rowItems().map((it, i) => ({ ...it, product_name: it.product_name || '[ชื่อสินค้า]', net_price: c.lines[i].net, line_total: c.lines[i].line, prev_diff_pct: c.lines[i].pct })),
-    credit_days: parseDays(d.credit_days).days, lead_days: parseDays(d.lead_days).days, warranty: d.warranty,
+    credit_days: parseDays(d.credit_days).days, lead_days: parseDays(d.lead_days).days, warranty: d.warranty, report_no: d.report_no, report_date: d.report_date || null,
     sku: skuKey(d.items[0].sku), product_name: summaryName, qty: n === 1 ? c.lines[0].q : n, unit: n === 1 ? d.items[0].unit : 'รายการ',
     unit_price: n === 1 ? c.lines[0].net : 0, subtotal: c.sub, vat: c.vat, total: c.total, vat_rate: vatRate, dept: d.dept, purpose: d.purpose,
     buyer_id: d.buyer_id, company_id: d.company_id, vendor: d.vendor || '[ผู้ขาย]', quote_no: d.quote_no,
@@ -489,6 +494,14 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
           <label className="f" htmlFor="f-quote">เลขที่ใบเสนอราคาผู้ขาย · Vendor quote no.
             <input className="in" id="f-quote" value={d.quote_no} onChange={(e) => set('quote_no', e.target.value)} />
           </label>
+          <label className="f" htmlFor="f-rno">รายงานเลขที่ (ถ้ามี) · Report no.
+            <input className="in" id="f-rno" value={d.report_no} maxLength={60} placeholder="ว่างไว้ = ใช้เลขคำขอของระบบ" onChange={(e) => set('report_no', e.target.value)} />
+            <span className="note" style={{ fontWeight: 400 }}>ขึ้นที่ “รายงานเลขที่” หัวตารางเปรียบเทียบ</span>
+          </label>
+          <label className="f" htmlFor="f-rdate">วันที่อนุมัติ (ถ้ามี) · Approval date
+            <input className="in" type="date" id="f-rdate" value={d.report_date} onChange={(e) => set('report_date', e.target.value)} />
+            <span className="note" style={{ fontWeight: 400 }}>ว่างไว้ = วันที่อนุมัติครบในระบบ</span>
+          </label>
           <label className="f" htmlFor="f-qdate">วันที่ใบเสนอราคา · Quotation date
             <input className="in" type="date" id="f-qdate" value={d.quote_date} onChange={(e) => set('quote_date', e.target.value)} />
           </label>
@@ -567,6 +580,10 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
                     </label>
                     <label className="f" htmlFor={`pd${i}`}>เมื่อ (วันที่)
                       <input className="in" type="date" id={`pd${i}`} value={it.prev_date} onChange={(e) => setItem(i, { prev_date: e.target.value })} />
+                    </label>
+                    <label className="f" htmlFor={`rn${i}`} title="พิมพ์ต่อท้าย Description ในตารางเปรียบเทียบ">รายงานเลขที่ (ของรายการนี้)
+                      <input className="in" id={`rn${i}`} value={it.report_no} maxLength={60} placeholder="ไม่บังคับ" onChange={(e) => setItem(i, { report_no: e.target.value })}
+                        onPaste={(e) => pasteDown(e, (k, v) => setItem(k, { report_no: v }), i)} />
                     </label>
                   </div>
                   <div className="item-info" aria-live="polite">

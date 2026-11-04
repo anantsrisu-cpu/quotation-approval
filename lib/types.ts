@@ -53,6 +53,8 @@ export interface LineItem {
   prev_vendor?: string;
   prev_date?: string | null;
   brand?: string;
+  /** report number of this line, printed after its description */
+  report_no?: string;
   line_total?: number;
   prev_diff_pct?: number | null;
 }
@@ -115,6 +117,9 @@ export interface RequestRow {
   credit_days?: number | null;
   lead_days?: number | null;
   warranty?: string;
+  /** typed report number / approval date for the sheet header (optional) */
+  report_no?: string;
+  report_date?: string | null;
   quote_no: string;
   quote_date: string | null;
   details: string;

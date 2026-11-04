@@ -92,10 +92,10 @@ export function useSheetData(r: RequestRow, steps: RequestStep[], draft: boolean
     companies: companies.filter((c) => c.active || c.id === r.company_id).map((c) => ({ id: c.id, label: c.th })),
     companyId: r.company_id,
     info: [
-      ['รายงานเลขที่', r.no || '(ยังไม่ออกเลข)'],
-      ['วันที่อนุมัติ', draft ? '(รออนุมัติ)' : dOnly(r.completed_at || r.letter_at)],
+      // typed on the request; otherwise the system number and the final-approval date
+      ['รายงานเลขที่', r.report_no?.trim() || r.no || '(ยังไม่ออกเลข)'],
+      ['วันที่อนุมัติ', r.report_date ? dOnly(r.report_date) : draft ? '(รออนุมัติ)' : dOnly(r.completed_at || r.letter_at)],
       ['ฝ่ายที่ขอซื้อ', deptTh(r.dept)],
-      ['ใบเสนอราคาเลขที่', r.quote_no || '—'],
     ],
     rev,
     items: items.map((it) => ({
@@ -108,6 +108,7 @@ export function useSheetData(r: RequestRow, steps: RequestStep[], draft: boolean
       prevPrice: it.prev_price,
       prevVendor: it.prev_vendor || '',
       prevDate: it.prev_date || null,
+      reportNo: it.report_no || '',
     })),
     vendors: [selected, ...others],
     vatRate: r.vat_rate || 0.07,

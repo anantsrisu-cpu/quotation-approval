@@ -48,6 +48,7 @@ export function ItemsTable({ r }: { r: RequestRow }) {
                   <span className="mono" style={{ fontSize: 12 }}>{it.sku}</span> · {it.product_name || '—'}
                   {it.brand && <span className="chip st-draft" style={{ marginLeft: 6 }}>{it.brand}</span>}
                   {it.description && <div className="note" style={{ whiteSpace: 'pre-wrap', color: 'var(--ink-2)' }}>{it.description}</div>}
+                  {it.report_no && <div className="note" style={{ color: 'var(--ink-2)' }}>รายงานเลขที่ {it.report_no}</div>}
                 </td>
                 <td className="num" style={{ ...R, whiteSpace: 'nowrap' }}>{fmtQty(it.qty)} {it.unit}</td>
                 <td className="num" style={R}>{fmt(it.unit_price)}</td>

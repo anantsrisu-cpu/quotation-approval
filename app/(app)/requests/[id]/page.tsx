@@ -6,7 +6,7 @@ import { useApp } from '@/components/AppProvider';
 import { ApprovalDoc } from '@/components/ApprovalDoc';
 import { SignaturePad, type PadHandle } from '@/components/SignaturePad';
 import { Chain, Chip, Loading, Modal } from '@/components/ui';
-import { PURP, SUBJ, dt, fileSize, fmt } from '@/lib/format';
+import { PURP, SUBJ, dOnly, dt, fileSize, fmt } from '@/lib/format';
 import { daysText, itemsOf } from '@/lib/calc';
 import { CompareTable, ItemsTable } from '@/components/ItemTables';
 import { downloadUrl, elementToPdf } from '@/lib/pdf';
@@ -238,6 +238,7 @@ export default function RequestDetail() {
                 ['ผู้ขาย · Vendor', r.vendor],
                 ['เครดิต / Lead time', `${daysText(r.credit_days)} / ${daysText(r.lead_days)}`],
                 ['การรับประกัน · Warranty', r.warranty || '—'],
+                ['รายงานเลขที่ / วันที่อนุมัติ (หัวตาราง)', `${r.report_no || r.no || '—'} / ${r.report_date ? dOnly(r.report_date) : 'วันที่อนุมัติครบ'}`],
                 ['เลขที่ใบเสนอราคา · Quote no.', r.quote_no || '—'],
                 ['ผู้ซื้อ · Buyer', name(r.buyer_id)],
                 ['บริษัทผู้ซื้อ · Buyer company', co?.th || '—'],

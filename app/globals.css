@@ -81,7 +81,8 @@ textarea.in{padding:10px 12px;resize:vertical;min-height:72px}
 .item-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px}
 .item-grid{display:grid;grid-template-columns:minmax(140px,1.8fr) minmax(64px,.6fr) minmax(84px,.8fr) minmax(100px,1fr) minmax(90px,.9fr) minmax(100px,1fr);gap:8px}
 .item-grid .f{font-size:13px;white-space:nowrap}
-.item-grid2{display:grid;grid-template-columns:minmax(100px,1fr) minmax(100px,1fr) minmax(140px,1.6fr) minmax(130px,1fr);gap:8px}
+.item-grid2{display:grid;grid-template-columns:minmax(100px,1fr) minmax(100px,1fr) minmax(140px,1.5fr) minmax(130px,1fr) minmax(130px,1.1fr);gap:8px}
+@media (max-width:1180px){.item-grid2{grid-template-columns:repeat(3,minmax(0,1fr))}}
 .item-grid2 .f{font-size:13px;white-space:nowrap}
 @media (max-width:640px){.item-grid2{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .item-info{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:14px;min-height:24px}
