@@ -2,7 +2,7 @@
 import { useEffect, useLayoutEffect, useRef } from 'react';
 import { useApp } from './AppProvider';
 import { compDiscounts, compNets, compPrices, itemsOf, netOf, normDiscount } from '@/lib/calc';
-import { dOnly, fmt, r2 } from '@/lib/format';
+import { dOnly, r2 } from '@/lib/format';
 import { renderSheet, type SheetData, type SheetSigner, type SheetVendor } from '@/lib/compareSheet';
 import type { RequestRow, RequestStep } from '@/lib/types';
 
@@ -93,14 +93,12 @@ export function useSheetData(r: RequestRow, steps: RequestStep[], draft: boolean
         };
       })
     : ordered.map((s, i) => stepBox(s, `ผู้อนุมัติ (${i + 1})`));
+  // remarks: what was typed in วัตถุประสงค์ / รายละเอียด, the reason for having no comparison,
+  // and the reason for each item not bought from the lowest price
   const notes: string[] = [];
-  if (r.details?.trim()) notes.push(`วัตถุประสงค์ / รายละเอียด: ${r.details.trim()}`);
-  if (r.no_comp) notes.push(`ไม่มีคู่เทียบ เหตุผล: ${r.no_comp_reason}`);
-  if (r.low_reason) notes.push(`เหตุผลที่ไม่เลือกราคาต่ำสุด: ${r.low_reason}`);
-  if (comps.length) {
-    const split = vendors.filter((v) => v.awarded).length > 1;
-    notes.push(`ยอดที่ขออนุมัติ (ตามรายการที่ติ๊ก ✓${split ? ' แยกซื้อหลายเจ้า' : ''}): ${fmt(r.total)} บาท รวม VAT`);
-  }
+  if (r.details?.trim()) notes.push(`วัตถุประสงค์: ${r.details.trim()}`);
+  if (r.no_comp && r.no_comp_reason?.trim()) notes.push(`เหตุผลที่ไม่มีคู่เทียบ: ${r.no_comp_reason.trim()}`);
+  if (r.low_reason?.trim()) notes.push(`เหตุผลที่ไม่เลือกราคาต่ำสุด: ${r.low_reason.trim()}`);
   items.forEach((it, k) => {
     if (it.award_reason?.trim())
       notes.push(`รายการที่ ${k + 1}${it.sku ? ` (${it.sku})` : ''}: ซื้อเจ้าที่ ${award[k] + 1} ${vendors[award[k]]?.name || ''} — ${it.award_reason.trim()}`);
