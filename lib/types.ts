@@ -22,6 +22,8 @@ export interface Profile {
 
 /** One of the two delivery boxes of a vendor on the comparison sheet. */
 export interface DeliverySlot { place: string; on: boolean }
+/** One unit of measure offered in the หน่วย dropdowns. */
+export interface UnitRow { name: string; sort: number; active: boolean }
 export interface DeliveryPlace { id: number; name: string; slot: 1 | 2; sort: number; active: boolean }
 
 export interface Settings {

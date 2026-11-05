@@ -6,7 +6,8 @@ import { ApprovalDoc } from './ApprovalDoc';
 import { Loading, Modal, PageHead } from './ui';
 import { blankComp, blankItem, calcItems, compDiscounts, compPrices, itemsOf, parseDays, type DraftComp, type DraftItem } from '@/lib/calc';
 import type { DeliverySlot } from '@/lib/types';
-import { PURP, SUBJ, SUBJ_EN, UNITS, fileSize, fmt, num } from '@/lib/format';
+import { PURP, SUBJ, SUBJ_EN, fileSize, fmt, num } from '@/lib/format';
+import { UnitField } from './UnitField';
 import type { ApproverPreview, LineItem, Product, RequestFile, RequestRow, RequestStep } from '@/lib/types';
 
 const MAX_FILE = 25 * 1024 * 1024;
@@ -643,9 +644,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
                       <input className="in r" inputMode="decimal" id={`qty${i}`} value={it.qty} onChange={(e) => setItem(i, { qty: e.target.value })} />
                     </label>
                     <label className="f" htmlFor={`unit${i}`}>หน่วย
-                      <select className="in" id={`unit${i}`} value={it.unit} onChange={(e) => setItem(i, { unit: e.target.value })}>
-                        {Array.from(new Set([...UNITS, it.unit].filter(Boolean))).map((u) => <option key={u} value={u}>{u}</option>)}
-                      </select>
+                      <UnitField id={`unit${i}`} value={it.unit} onChange={(v) => setItem(i, { unit: v })} />
                     </label>
                     <label className="f" htmlFor={`up${i}`}>ราคา/หน่วย <span className="req">*</span>
                       <input className="in r" inputMode="decimal" id={`up${i}`} value={it.unit_price} placeholder="0.00"

@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { useApp } from '@/components/AppProvider';
 import { AdminGate } from '@/components/AdminGate';
 import { Loading, Modal, PageHead } from '@/components/ui';
-import { UNITS } from '@/lib/format';
+import { UnitField } from '@/components/UnitField';
 import type { Product } from '@/lib/types';
 
 const PAGE = 100;
@@ -33,7 +33,7 @@ function parseCsv(text: string): string[][] {
 }
 
 function Products() {
-  const { sb, run, toast, bump, refresh } = useApp();
+  const { sb, run, toast, bump, refresh, unitRows, reloadRefs } = useApp();
   const [rows, setRows] = useState<Product[] | null>(null);
   const [total, setTotal] = useState(0);
   const [active, setActive] = useState(0);
@@ -145,8 +145,14 @@ function Products() {
     if (!adding) return;
     const sku = adding.sku.trim().toUpperCase();
     if (!sku || !adding.name.trim()) return toast('bad', 'กรอก SKU และชื่อสินค้า · SKU and name required', '');
-    const { ok } = await run('add-product', sb.from('products').upsert({ ...adding, sku, name: adding.name.trim(), updated_at: new Date().toISOString() }));
+    const unit = adding.unit.trim();
+    const { ok } = await run('add-product', sb.from('products').upsert({ ...adding, sku, unit, name: adding.name.trim(), updated_at: new Date().toISOString() }));
     if (ok) {
+      // a unit typed by hand joins the units list (ตั้งค่าระบบ → หน่วยสินค้า)
+      if (unit && !unitRows.some((u) => u.name === unit)) {
+        const r = await sb.from('units').upsert({ name: unit, sort: (unitRows.at(-1)?.sort || 0) + 10 }, { onConflict: 'name', ignoreDuplicates: true });
+        if (!r.error) reloadRefs();
+      }
       toast('ok', 'บันทึกสินค้าแล้ว · Product saved', sku);
       setAdding(null);
       refresh();
@@ -242,9 +248,7 @@ function Products() {
           <div className="grid">
             <label className="f">หมวด · Category<input className="in" value={adding.category} onChange={(e) => setAdding({ ...adding, category: e.target.value })} /></label>
             <label className="f">หน่วย · Unit
-              <select className="in" value={adding.unit} onChange={(e) => setAdding({ ...adding, unit: e.target.value })}>
-                {Array.from(new Set([...UNITS, adding.unit].filter(Boolean))).map((u) => <option key={u} value={u}>{u}</option>)}
-              </select>
+              <UnitField id="p-unit" value={adding.unit} onChange={(v) => setAdding({ ...adding, unit: v })} />
             </label>
           </div>
           <div className="row" style={{ gap: 10, justifyContent: 'flex-end' }}>

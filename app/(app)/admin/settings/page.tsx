@@ -4,7 +4,7 @@ import { useApp } from '@/components/AppProvider';
 import { AdminGate } from '@/components/AdminGate';
 import { PageHead } from '@/components/ui';
 import { fmt, num } from '@/lib/format';
-import type { Company, DeliveryPlace, Department, Position, Tier } from '@/lib/types';
+import type { Company, DeliveryPlace, Department, Position, Tier, UnitRow } from '@/lib/types';
 
 type TierEdit = Omit<Tier, 'id' | 'max_amount'> & { id?: number; max: string };
 const slug = (s: string) => s.trim().toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
@@ -328,6 +328,49 @@ function Companies() {
   );
 }
 
+/** Units of measure offered in every หน่วย dropdown (request items and products). */
+function Units() {
+  const { sb, unitRows, run, toast, reloadRefs } = useApp();
+  const [rows, setRows] = useState<(UnitRow & { isNew?: boolean })[]>([]);
+  useEffect(() => setRows(unitRows.map((u) => ({ ...u }))), [unitRows]);
+  const upd = (i: number, patch: Partial<UnitRow>) => setRows(rows.map((x, j) => (j === i ? { ...x, ...patch } : x)));
+  const add = () => setRows([...rows, { name: '', sort: Math.max(0, ...rows.map((x) => x.sort)) + 10, active: true, isNew: true }]);
+  async function save() {
+    const fixed = rows.map((u) => ({ ...u, name: u.name.trim() }));
+    if (fixed.some((u) => !u.name)) return toast('bad', 'กรอกชื่อหน่วยให้ครบ หรือลบแถวที่ว่าง · Enter every unit name', '');
+    if (fixed.some((u) => u.name.length > 20)) return toast('bad', 'ชื่อหน่วยยาวเกิน 20 ตัวอักษร · Unit name too long', '');
+    const dup = dupCode(fixed.map((u) => u.name));
+    if (dup) return toast('bad', `หน่วย “${dup}” ซ้ำกัน · Duplicate unit`, 'มีหน่วยนี้อยู่แล้ว ใช้ช่อง “ใช้งาน” เปิดหน่วยเดิมแทน · This unit already exists');
+    const { ok } = await run('save-units', sb.from('units').upsert(fixed.map(({ name, sort, active }) => ({ name, sort: Number(sort) || 0, active })), { onConflict: 'name' }));
+    if (ok) { toast('ok', 'บันทึกหน่วยสินค้าแล้ว · Units saved', 'ใช้ได้ทันทีในช่อง “หน่วย” · Available in every unit dropdown'); reloadRefs(); }
+  }
+  return (
+    <div className="card">
+      <div className="actions"><h2>หน่วยสินค้า · Units <span className="chip st-draft">{rows.filter((u) => u.active).length} หน่วยที่ใช้งาน</span></h2>
+        <div className="row" style={{ gap: 8 }}>
+          <button className="btn sm" onClick={add}>+ เพิ่มหน่วย · Add</button>
+          <button className="btn p sm" onClick={save}>บันทึก · Save</button>
+        </div>
+      </div>
+      <span className="note">รายการในช่อง “หน่วย” ของรายการสินค้าในคำขอและหน้าสินค้า เรียงตาม “ลำดับ” · ปิด “ใช้งาน” เพื่อซ่อนจากรายการ (คำขอเดิมยังแสดงหน่วยเดิม) · ผู้จัดทำพิมพ์หน่วยที่ไม่มีในรายการเองได้ที่ “+ พิมพ์หน่วยอื่น” · Units shown in every unit dropdown.</span>
+      {!unitRows.length && <div className="warn-box">ยังไม่มีตารางหน่วยสินค้า — รัน SQL 0009 ใน Supabase ก่อน ระหว่างนี้ระบบใช้หน่วยพื้นฐาน · Run migration 0009 first</div>}
+      <div className="unit-grid">
+        {rows.map((u, i) => (
+          <div key={u.isNew ? `n${i}` : u.name} className={`unit-row${u.active ? '' : ' off'}`}>
+            <label className="f" style={{ flex: '2 1 90px' }}>ชื่อหน่วย
+              <input className="in" id={`un-name${i}`} value={u.name} maxLength={20} disabled={!u.isNew} placeholder="เช่น ถัง" autoFocus={u.isNew && i === rows.length - 1}
+                onChange={(e) => upd(i, { name: e.target.value })} />
+            </label>
+            <label className="f" style={{ flex: '1 1 60px' }}>ลำดับ<input className="in r" inputMode="numeric" value={u.sort} onChange={(e) => upd(i, { sort: Number(e.target.value) || 0 })} /></label>
+            {u.isNew ? <button className="icon-btn" aria-label="ลบแถวนี้" onClick={() => setRows(rows.filter((_, j) => j !== i))}>✕</button>
+              : <label className="check"><input type="checkbox" checked={u.active} onChange={(e) => upd(i, { active: e.target.checked })} />ใช้งาน</label>}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 type PlaceEdit = Omit<DeliveryPlace, 'id'> & { id?: number };
 /** Delivery places offered in the two delivery boxes of every vendor on the comparison sheet. */
 function Places() {
@@ -378,12 +421,13 @@ function Places() {
 export default function SettingsPage() {
   return (
     <AdminGate>
-      <PageHead title="ตั้งค่าระบบ" lead="Application settings — price tiers, approver positions, departments, companies, delivery places and letter details" />
+      <PageHead title="ตั้งค่าระบบ" lead="Application settings — price tiers, approver positions, departments, companies, units, delivery places and letter details" />
       <Tiers />
       <Positions />
       <General />
       <Companies />
       <Departments />
+      <Units />
       <Places />
     </AdminGate>
   );

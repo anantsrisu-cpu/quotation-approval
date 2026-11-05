@@ -224,3 +224,11 @@ table.cmp tr.why input.in{min-width:0;width:100%}
 /* settings: approval flow readout and amount tester */
 .tier-flow{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;font-size:14px;padding-top:10px;border-top:1px dashed var(--beige)}
 .tier-probe{display:flex;flex-wrap:wrap;gap:12px 16px;align-items:flex-end;background:var(--soft);border:1px solid var(--beige);border-radius:10px;padding:12px 14px}
+.unit-type{position:relative;display:block}
+.unit-type .in{width:100%;min-width:0;padding-right:28px}
+.unit-type .unit-back{position:absolute;right:2px;top:50%;transform:translateY(-50%);width:26px;height:32px;border:0;border-radius:6px;background:transparent;color:var(--ink-2);font-size:14px;cursor:pointer}
+.unit-type .unit-back:hover,.unit-type .unit-back:focus-visible{background:var(--soft)}
+.unit-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
+.unit-row{display:flex;gap:8px;align-items:flex-end;border:1px solid var(--beige);border-radius:10px;padding:10px}
+.unit-row.off{background:var(--soft);opacity:.75}
+.unit-row .check{padding-bottom:10px;white-space:nowrap}
