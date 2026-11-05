@@ -11,6 +11,26 @@ const slug = (s: string) => s.trim().toLowerCase().replace(/[^a-z0-9_-]+/g, '-')
 /** First code used by more than one row (saving such a list fails in the database), or null. */
 const dupCode = (codes: string[]) => codes.find((c, i) => c && codes.indexOf(c) !== i) ?? null;
 
+/** 1000000 → "1,000,000" · 1000000.5 → "1,000,000.50" */
+const baht = (n: number) => (Number.isInteger(n) ? n.toLocaleString('en-US') : fmt(n));
+type TierLike = { max: number | null; steps: string[]; label: string };
+/**
+ * Amount range of each tier, in order: a tier covers everything above the
+ * previous tier's limit up to and including its own (same rule as the database).
+ */
+function tierRanges<T extends TierLike>(list: T[]) {
+  const sorted = [...list].sort((a, b) => (a.max ?? Infinity) - (b.max ?? Infinity));
+  let prev: number | null = null;
+  return sorted.map((t) => {
+    const from = prev == null ? 1 : Number.isInteger(prev) ? prev + 1 : Math.round((prev + 0.01) * 100) / 100;
+    const r = { tier: t, from, to: t.max, prev };
+    prev = t.max;
+    return r;
+  });
+}
+const rangeText = (from: number, to: number | null, prev: number | null) =>
+  to == null ? (prev == null ? 'ทุกยอด' : `มากกว่า ${baht(prev)}`) : `${baht(from)}-${baht(to)}`;
+
 function General() {
   const { sb, settings, run, toast, reloadRefs } = useApp();
   const [vat, setVat] = useState('7');
@@ -42,7 +62,7 @@ function General() {
 }
 
 function Positions() {
-  const { sb, positions, run, toast, reloadRefs } = useApp();
+  const { sb, positions, tiers, run, toast, reloadRefs } = useApp();
   const [rows, setRows] = useState<(Position & { isNew?: boolean })[]>([]);
   useEffect(() => setRows(positions.map((p) => ({ ...p }))), [positions]);
   async function save() {
@@ -55,6 +75,25 @@ function Positions() {
     const { ok } = await run('save-positions', sb.from('positions').upsert(rows.map(({ code, th, en, sort, note, sign_mode }) => ({ code, th: th.trim(), en: en.trim(), sort: Number(sort) || 0, note: (note || '').trim(), sign_mode: sign_mode || 'online' }))));
     if (ok) { toast('ok', 'บันทึกตำแหน่งแล้ว · Positions saved', ''); reloadRefs(); }
   }
+  /** ช่วงวงเงิน of each position = the tiers whose approval ends at that position */
+  function fillFromTiers() {
+    const R = tierRanges(tiers.map((t) => ({ label: t.label, steps: t.steps, max: t.max_amount })));
+    const order = [...rows].sort((a, b) => a.sort - b.sort).map((p) => p.code);
+    let n = 0;
+    const next = rows.map((p) => {
+      const mine = R.filter((r) => {
+        const last = order.filter((c) => r.tier.steps.includes(c)).at(-1);
+        return last === p.code;
+      });
+      if (!mine.length) return p;
+      n++;
+      const a = mine[0];
+      const b = mine[mine.length - 1];
+      return { ...p, note: rangeText(a.from, b.to, a.prev) };
+    });
+    setRows(next);
+    toast('info', `เติมช่วงวงเงินแล้ว ${n} ตำแหน่ง · Filled`, 'ตรวจแล้วกด “บันทึก” เพื่อใช้ · Check, then press Save');
+  }
   async function remove(code: string) {
     const { ok } = await run('delete-position', sb.from('positions').delete().eq('code', code));
     if (ok) { toast('ok', 'ลบแล้ว · Deleted', code); reloadRefs(); }
@@ -63,6 +102,7 @@ function Positions() {
     <div className="card">
       <div className="actions"><h2>ตำแหน่งผู้อนุมัติ · Approver positions</h2>
         <div className="row" style={{ gap: 8 }}>
+          <button className="btn sm" onClick={fillFromTiers} title="ใช้ระดับวงเงินที่บันทึกไว้ เติมช่อง “ช่วงวงเงิน” ของตำแหน่งที่อนุมัติเป็นคนสุดท้าย">เติมช่วงวงเงินจากระดับวงเงิน · Fill from tiers</button>
           <button className="btn sm" onClick={() => setRows([...rows, { code: '', th: '', en: '', sort: (rows.at(-1)?.sort || 0) + 10, note: '', sign_mode: 'online', isNew: true }])}>+ เพิ่ม · Add</button>
           <button className="btn p sm" onClick={save}>บันทึก · Save</button>
         </div>
@@ -99,6 +139,13 @@ function Tiers() {
     setRemoved([]);
   }, [tiers]);
   const P = [...positions].sort((a, b) => a.sort - b.sort);
+  const [probe, setProbe] = useState('1,000,001');
+  const ranges = tierRanges(rows.map((t, idx) => ({ ...t, idx, max: t.max.trim() === '' ? null : num(t.max) })));
+  /** the approval flow of one tier, in position order; hand-signed positions are marked */
+  const flow = (steps: string[]) =>
+    P.filter((p) => steps.includes(p.code)).map((p) => (p.sign_mode === 'wet' ? `${p.th} (ลายเซ็นสด)` : p.th));
+  const probeAmt = num(probe);
+  const hit = probeAmt > 0 ? ranges.find((r) => r.to == null || probeAmt <= r.to) : undefined;
 
   async function save() {
     if (rows.some((t) => !t.label.trim() || !t.steps.length)) return toast('bad', 'บันทึกไม่ได้ · Not saved', 'ทุกระดับต้องมีชื่อและผู้อนุมัติอย่างน้อย 1 ตำแหน่ง · Every tier needs a label and at least one approver');
@@ -143,9 +190,35 @@ function Tiers() {
             </div>
           </fieldset>
           <button className="icon-btn" aria-label="ลบระดับ · Remove tier" onClick={() => { if (t.id) setRemoved([...removed, t.id]); setRows(rows.filter((_, j) => j !== i)); }}>✕</button>
+          {(() => {
+            const r = ranges.find((x) => x.tier.idx === i);
+            const f = flow(t.steps);
+            return (
+              <div className="tier-flow" style={{ flexBasis: '100%' }}>
+                {r && <span className="chip st-draft num">ยอด {rangeText(r.from, r.to, r.prev)} บาท</span>}
+                {f.length ? (
+                  <span>
+                    {f.map((x, k) => <span key={k}>{k > 0 && <span aria-hidden="true"> → </span>}<b>{x}</b></span>)}
+                    <span className="note"> · อนุมัติครบที่ {f[f.length - 1]}</span>
+                  </span>
+                ) : <span style={{ color: 'var(--bad)' }}>ยังไม่ได้เลือกผู้อนุมัติ</span>}
+              </div>
+            );
+          })()}
         </div>
       ))}
-      <span className="note">ลำดับผู้อนุมัติเรียงตาม: {P.map((p) => p.th).join(' → ')} · ระบบเรียงระดับตามวงเงินให้อัตโนมัติ · Tiers are sorted by amount automatically</span>
+      <span className="note">ติ๊กตำแหน่งที่ต้องอนุมัติในแต่ละระดับ ระบบส่งให้อนุมัติตามลำดับ: {P.map((p) => p.th).join(' → ')} · ระดับหนึ่งครอบคลุมยอดที่มากกว่าระดับก่อนหน้า จนถึง “ไม่เกิน” ของตัวเอง · ระบบเรียงระดับตามวงเงินให้อัตโนมัติ · Tiers are sorted by amount automatically</span>
+      <div className="tier-probe">
+        <label className="f" htmlFor="tier-probe" style={{ flex: '0 1 240px' }}>ทดลองยอดเงิน (รวม VAT) · Try an amount
+          <input className="in r" id="tier-probe" inputMode="decimal" value={probe} onChange={(e) => setProbe(e.target.value)} onBlur={() => probeAmt > 0 && setProbe(fmt(probeAmt))} />
+        </label>
+        <div role="status" style={{ flex: '1 1 260px' }}>
+          {!(probeAmt > 0) ? <span className="note">ใส่ยอดเงินเพื่อดูว่าใครต้องอนุมัติ</span>
+            : !hit ? <span style={{ color: 'var(--bad)' }}>เกินระดับสูงสุด — ส่งคำขอไม่ได้ เพิ่มระดับ “ไม่จำกัด”</span>
+            : <>ยอด <b className="num">{fmt(probeAmt)}</b> บาท อยู่ในระดับ <b>{hit.tier.label || '—'}</b> → อนุมัติตามลำดับ: <b>{flow(hit.tier.steps).join(' → ') || '—'}</b></>}
+          <div className="note">ตามค่าที่แสดงบนหน้านี้ (ยังไม่ต้องกดบันทึก) · Uses the values on screen</div>
+        </div>
+      </div>
     </div>
   );
 }

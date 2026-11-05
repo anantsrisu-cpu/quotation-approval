@@ -221,3 +221,6 @@ table.cmp tr.why input.in{min-width:0;width:100%}
 .dlv-slot{display:flex;align-items:center;gap:6px}
 .dlv-slot input[type=checkbox]{width:18px;height:18px;flex:none;accent-color:var(--brown);margin:0}
 .dlv-slot select.in{min-height:36px;font-size:13px;min-width:140px;padding-block:4px}
+/* settings: approval flow readout and amount tester */
+.tier-flow{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;font-size:14px;padding-top:10px;border-top:1px dashed var(--beige)}
+.tier-probe{display:flex;flex-wrap:wrap;gap:12px 16px;align-items:flex-end;background:var(--soft);border:1px solid var(--beige);border-radius:10px;padding:12px 14px}
