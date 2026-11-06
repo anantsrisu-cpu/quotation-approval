@@ -143,6 +143,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
             <div>
               <h3>ทั่วไป · GENERAL</h3>
               <NavLink href="/history" th="ประวัติและค้นหา" en="History & search" />
+              {!has('admin') && (has('preparer') || has('approver')) && <NavLink href="/products" th="รายการสินค้า SKU" en="SKU product list" />}
               <NavLink href="/notifications" th="การแจ้งเตือน" en="Notifications" />
               <NavLink href="/profile" th="บัญชีและลายเซ็นของฉัน" en="My account & signature" />
             </div>
