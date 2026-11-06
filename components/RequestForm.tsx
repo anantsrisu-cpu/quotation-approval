@@ -330,6 +330,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
     if (d.multi_vendor && !d.no_comp && c.awards[i]?.best < 0) missing.push(`${L}: ยังไม่มีผู้ขายเสนอราคา กรอกราคาอย่างน้อย 1 เจ้า · No vendor quoted this item`);
     if (c.lines[i]?.discErr) missing.push(`${L}: ${c.lines[i].discErr} · Check the discount`);
   });
+  if (!d.report_no.trim()) missing.push('กรอกรายงานเลขที่ (ใช้เป็นเลขที่คำขอ) · Enter the report no.');
   if (!d.dept) missing.push('เลือกฝ่ายที่ขอซื้อ · Choose the department');
   if (!d.vendor.trim()) missing.push('กรอกชื่อผู้ขาย · Enter the vendor');
   if (parseDays(d.credit_days).error) missing.push('เครดิต: ใส่จำนวนวันเป็นตัวเลข · Credit must be whole days');
@@ -593,7 +594,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
     <>
       <PageHead
         title={id ? (no ? `แก้ไขคำขอ ${no}` : 'แก้ไขฉบับร่าง') : 'สร้างคำขออนุมัติใหม่'}
-        lead="New approval request · เลขที่จะออกให้อัตโนมัติเมื่อส่ง · number assigned when sent"
+        lead="New approval request · เลขที่คำขอ = รายงานเลขที่ที่กรอก · the request number is the report no."
       >
         <button className="btn o" onClick={() => setModal('preview')}>ดูตัวอย่างร่าง · Preview draft</button>
       </PageHead>
@@ -649,9 +650,9 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
           <label className="f" htmlFor="f-quote">เลขที่ใบเสนอราคาผู้ขาย · Vendor quote no.
             <input className="in" id="f-quote" value={d.quote_no} onChange={(e) => set('quote_no', e.target.value)} />
           </label>
-          <label className="f" htmlFor="f-rno">รายงานเลขที่ (ถ้ามี) · Report no.
-            <input className="in" id="f-rno" value={d.report_no} maxLength={60} placeholder="ว่างไว้ = ใช้เลขคำขอของระบบ" onChange={(e) => set('report_no', e.target.value)} />
-            <span className="note" style={{ fontWeight: 400 }}>ขึ้นที่ “รายงานเลขที่” หัวตารางเปรียบเทียบ</span>
+          <label className="f" htmlFor="f-rno">รายงานเลขที่ · Report no. <span className="req">*</span>
+            <input className="in" id="f-rno" value={d.report_no} maxLength={60} placeholder="เช่น R11HO.2611-0005" aria-required="true" onChange={(e) => set('report_no', e.target.value)} />
+            <span className="note" style={{ fontWeight: 400 }}>ใช้เป็นเลขที่คำขอ และขึ้นที่ “รายงานเลขที่” หัวตารางเปรียบเทียบ · ห้ามซ้ำกับคำขออื่น</span>
           </label>
           <label className="f" htmlFor="f-rdate">วันที่อนุมัติ (ถ้ามี) · Approval date
             <input className="in" type="date" id="f-rdate" value={d.report_date} onChange={(e) => set('report_date', e.target.value)} />

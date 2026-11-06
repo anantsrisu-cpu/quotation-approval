@@ -152,15 +152,40 @@ const hasSplit = (d: SheetData) => d.items.some((it) => it.split && it.split.len
 /** columns per vendor: [Q'TY,] ราคาต่อหน่วย, ราคารวม */
 const perVendor = (d: SheetData) => (hasSplit(d) ? 3 : 2);
 
-function layoutCols(nv: number, per = 2) {
-  const fixed = { item: 32, part: 76, brand: 58, qty: 38, unit: 40, prev: 84 };
-  const fixedSum = Object.values(fixed).reduce((a, b) => a + b, 0);
-  const minDesc = nv > 5 ? 110 : per === 3 ? 130 : 150;
-  const qw = per === 3 ? (nv > 4 ? 30 : 36) : 0;
-  const vw = Math.max(44, Math.min(88, Math.floor((INNER_W - fixedSum - minDesc - qw * nv) / (2 * Math.max(1, nv)))));
-  const desc = INNER_W - fixedSum - (vw * 2 + qw) * nv;
-  const font = nv <= 3 ? 10 : nv <= 5 ? 9.5 : 8.5;
-  return { ...fixed, desc, vw, qw, font };
+/**
+ * Column widths. Q'TY, unit-price and total columns are as wide as their longest
+ * number (e.g. 2,459,600 or ✓ 47,403,200.00) so nothing spills into the next column;
+ * DESCRIPTION gives up width first, then the font gets a little smaller.
+ */
+function layoutCols(d: SheetData) {
+  const nv = Math.max(1, d.vendors.length);
+  const per = perVendor(d);
+  const len = (xs: string[]) => Math.max(1, ...xs.map((x) => x.length));
+  const qLen = len(d.items.map((it) => qtyFmt(it.qty)));
+  const uLen = len(d.vendors.flatMap((v) => v.net.map((x) => money(x))));
+  const lLen = len(d.vendors.flatMap((v) => [...v.line, v.subtotal, v.total].map((x) => money(x))));
+  const base = nv <= 3 ? 10 : nv <= 5 ? 9.5 : 8.5;
+  const fixedOther = 32 + 76 + 58 + 40 + 84; // item, part no., brand, unit, previous price
+  let out = null as null | { item: number; part: number; brand: number; qty: number; unit: number; prev: number; desc: number; qw: number; uw: number; lw: number; font: number };
+  for (let font = base; font >= 7.5; font -= 0.5) {
+    const digit = font * 0.6; // one digit or comma in the sheet font, with a little slack
+    const fit = (chars: number, min: number, extra = 0) => Math.round(Math.max(min, chars * digit + 10 + extra));
+    const qty = fit(qLen, 38);
+    const qw = per === 3 ? fit(qLen, nv > 4 ? 30 : 36) : 0;
+    let uw = fit(uLen, 44);
+    let lw = fit(lLen, 44, font * 1.1); // room for the ✓
+    // spare room goes to the vendor columns (up to 88 px each), the rest to DESCRIPTION
+    const minDesc = nv > 5 ? 110 : per === 3 ? 120 : 150;
+    const spare = INNER_W - fixedOther - qty - minDesc - (qw + uw + lw) * nv;
+    if (spare < 0 && font > 7.5) continue;
+    const grow = Math.max(0, Math.min(Math.floor(spare / (2 * nv)), 88 - Math.min(uw, lw)));
+    uw += Math.max(0, Math.min(grow, 88 - uw));
+    lw += Math.max(0, Math.min(grow, 88 - lw));
+    const desc = INNER_W - fixedOther - qty - (qw + uw + lw) * nv;
+    out = { item: 32, part: 76, brand: 58, qty, unit: 40, prev: 84, desc: Math.max(80, desc), qw, uw, lw, font };
+    break;
+  }
+  return out!;
 }
 
 function headerHtml(d: SheetData, page: number, pages: number) {
@@ -179,7 +204,7 @@ function headerHtml(d: SheetData, page: number, pages: number) {
 }
 
 function colgroup(L: ReturnType<typeof layoutCols>, nv: number) {
-  const one = (L.qw ? `<col style="width:${L.qw}px">` : '') + `<col style="width:${L.vw}px">`.repeat(2);
+  const one = (L.qw ? `<col style="width:${L.qw}px">` : '') + `<col style="width:${L.uw}px"><col style="width:${L.lw}px">`;
   return `<colgroup><col style="width:${L.item}px"><col style="width:${L.part}px"><col style="width:${L.desc}px"><col style="width:${L.brand}px"><col style="width:${L.qty}px"><col style="width:${L.unit}px"><col style="width:${L.prev}px">${one.repeat(nv)}</colgroup>`;
 }
 
@@ -322,7 +347,7 @@ function paginate(d: SheetData, m: { head: number; thead: number; rows: number[]
 export async function renderSheet(host: HTMLElement, d: SheetData): Promise<number> {
   const doc = host.ownerDocument;
   ensureStyle(doc);
-  const L = layoutCols(d.vendors.length, perVendor(d));
+  const L = layoutCols(d);
 
   // 1. off-screen copy with every row, to measure heights
   const meas = doc.createElement('div');
