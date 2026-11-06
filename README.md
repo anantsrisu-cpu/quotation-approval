@@ -77,6 +77,7 @@ Every state change goes through database functions, so amounts, approvers and si
    ต่อด้วย [`supabase/migrations/0007_report_no.sql`](supabase/migrations/0007_report_no.sql) กด **Run** (รายงานเลขที่/วันที่อนุมัติที่กรอกเองในคำขอ และรายงานเลขที่ของแต่ละรายการ)
    ต่อด้วย [`supabase/migrations/0008_award_delivery.sql`](supabase/migrations/0008_award_delivery.sql) กด **Run** (ติ๊ก ✓ ผู้ขายต่อรายการ — ตั้งต้นที่ราคาต่ำสุด เลือกเจ้าอื่นต้องมีเหตุผล แยกซื้อได้ ยอดอนุมัติ = รายการที่ติ๊ก — และสถานที่จัดส่ง 2 ช่องต่อผู้ขาย พร้อมตาราง delivery_places ที่ตั้งค่าได้)
    ต่อด้วย [`supabase/migrations/0009_units.sql`](supabase/migrations/0009_units.sql) กด **Run** (หน่วยสินค้าที่ผู้ดูแลเพิ่ม/ปิดได้ที่ ตั้งค่าระบบ → หน่วยสินค้า)
+   ต่อด้วย [`supabase/migrations/0010_split_delete_company_reset.sql`](supabase/migrations/0010_split_delete_company_reset.sql) กด **Run** (แบ่งซื้อต่อรายการ · ผู้จัดทำลบคำขอที่ยังไม่อนุมัติ · ผู้อนุมัติตามบริษัท · ผู้ดูแลล้างคำขอทั้งหมดก่อน Go-Live) — **รันก่อนเปิดเว็บเวอร์ชันนี้**
    > ระบบที่ใช้งานอยู่แล้ว: รันเฉพาะไฟล์ที่ยังไม่เคยรัน ตามลำดับเลข ข้อมูลเดิมถูกแปลงให้อัตโนมัติ และรันซ้ำได้โดยไม่เสียหาย
 4. ไปที่ **Project Settings → API** (หรือ **Data API / API Keys**) จดค่า:
    - **Project URL** → ใช้เป็น `NEXT_PUBLIC_SUPABASE_URL`
@@ -188,6 +189,7 @@ psql -d qa_test -f supabase/migrations/0005_compare_sheet_fields.sql
 psql -d qa_test -f supabase/migrations/0006_wet_signature.sql
 psql -d qa_test -f supabase/migrations/0007_report_no.sql
 psql -d qa_test -f supabase/migrations/0008_award_delivery.sql
+psql -d qa_test -f supabase/migrations/0010_split_delete_company_reset.sql
 psql -d qa_test -v ON_ERROR_STOP=1 -f supabase/tests/10_workflow_test.sql   # ends with: ALL TESTS PASSED
 psql -d qa_test -v ON_ERROR_STOP=1 -f supabase/tests/20_items_proxy_test.sql   # ends with: ALL 0003 TESTS PASSED
 psql -d qa_test -v ON_ERROR_STOP=1 -f supabase/tests/30_discount_test.sql      # ends with: ALL 0004 TESTS PASSED
@@ -196,6 +198,7 @@ psql -d qa_test -v ON_ERROR_STOP=1 -f supabase/tests/50_wet_signature_test.sql #
 psql -d qa_test -v ON_ERROR_STOP=1 -f supabase/tests/60_report_no_test.sql     # ends with: ALL 0007 TESTS PASSED
 psql -d qa_test -v ON_ERROR_STOP=1 -f supabase/tests/70_award_delivery_test.sql # ends with: ALL 0008 TESTS PASSED
 psql -d qa_test -v ON_ERROR_STOP=1 -f supabase/tests/80_units_test.sql        # runs 0009 itself; ends with: ALL 0009 TESTS PASSED
+psql -d qa_test -v ON_ERROR_STOP=1 -f supabase/tests/90_split_delete_company_reset_test.sql # runs last (clears requests); ends with: ALL 0010 TESTS PASSED
 ```
 ครอบคลุม · Covers: first admin, applications, self-promotion blocked, server-side amounts and tiers, approver resolution by department, signatures required, forward rules, reject → reopen → resend (keeps number), admin remind/reassign/cancel, letter path rules, visibility for outsiders, disabled accounts.
 
