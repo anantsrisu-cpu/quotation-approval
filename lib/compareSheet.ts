@@ -146,14 +146,20 @@ function ensureStyle(doc: Document) {
   doc.head.appendChild(st);
 }
 
-function layoutCols(nv: number) {
+/** แบ่งซื้อ on any item: every vendor gets its own Q'TY column */
+const hasSplit = (d: SheetData) => d.items.some((it) => it.split && it.split.length);
+/** columns per vendor: [Q'TY,] ราคาต่อหน่วย, ราคารวม */
+const perVendor = (d: SheetData) => (hasSplit(d) ? 3 : 2);
+
+function layoutCols(nv: number, per = 2) {
   const fixed = { item: 32, part: 76, brand: 58, qty: 38, unit: 40, prev: 84 };
   const fixedSum = Object.values(fixed).reduce((a, b) => a + b, 0);
-  const minDesc = nv > 5 ? 110 : 150;
-  const vw = Math.max(44, Math.min(88, Math.floor((INNER_W - fixedSum - minDesc) / (2 * Math.max(1, nv)))));
-  const desc = INNER_W - fixedSum - vw * 2 * nv;
+  const minDesc = nv > 5 ? 110 : per === 3 ? 130 : 150;
+  const qw = per === 3 ? (nv > 4 ? 30 : 36) : 0;
+  const vw = Math.max(44, Math.min(88, Math.floor((INNER_W - fixedSum - minDesc - qw * nv) / (2 * Math.max(1, nv)))));
+  const desc = INNER_W - fixedSum - (vw * 2 + qw) * nv;
   const font = nv <= 3 ? 10 : nv <= 5 ? 9.5 : 8.5;
-  return { ...fixed, desc, vw, font };
+  return { ...fixed, desc, vw, qw, font };
 }
 
 function headerHtml(d: SheetData, page: number, pages: number) {
@@ -172,23 +178,23 @@ function headerHtml(d: SheetData, page: number, pages: number) {
 }
 
 function colgroup(L: ReturnType<typeof layoutCols>, nv: number) {
-  return `<colgroup><col style="width:${L.item}px"><col style="width:${L.part}px"><col style="width:${L.desc}px"><col style="width:${L.brand}px"><col style="width:${L.qty}px"><col style="width:${L.unit}px"><col style="width:${L.prev}px">${Array(nv * 2)
-    .fill(`<col style="width:${L.vw}px">`)
-    .join('')}</colgroup>`;
+  const one = (L.qw ? `<col style="width:${L.qw}px">` : '') + `<col style="width:${L.vw}px">`.repeat(2);
+  return `<colgroup><col style="width:${L.item}px"><col style="width:${L.part}px"><col style="width:${L.desc}px"><col style="width:${L.brand}px"><col style="width:${L.qty}px"><col style="width:${L.unit}px"><col style="width:${L.prev}px">${one.repeat(nv)}</colgroup>`;
 }
 
 function theadHtml(d: SheetData) {
   const nv = d.vendors.length;
+  const per = perVendor(d);
   return `<thead>
 <tr><th rowspan="3">Item</th><th rowspan="3">Part No.</th><th rowspan="3">DESCRIPTION</th><th rowspan="3">BRAND</th><th rowspan="3">Q'TY</th><th rowspan="3">UNIT</th>
-<th rowspan="3">ราคาประวัติเก่า /<br>ชื่อบริษัท / เมื่อไร<br>(ต่อหน่วย)</th><th colspan="${nv * 2}">Vendor Name</th></tr>
+<th rowspan="3">ราคาประวัติเก่า /<br>ชื่อบริษัท / เมื่อไร<br>(ต่อหน่วย)</th><th colspan="${nv * per}">Vendor Name</th></tr>
 <tr>${d.vendors
     .map(
       (v, i) =>
-        `<th colspan="2"${v.selected ? ' class="sel"' : ''}>เจ้าที่ ${i + 1}${v.selected ? ' ✓' : ''}<br><b style="font-weight:600">${esc(v.name)}</b></th>`,
+        `<th colspan="${per}"${v.selected ? ' class="sel"' : ''}>เจ้าที่ ${i + 1}${v.selected ? ' ✓' : ''}<br><b style="font-weight:600">${esc(v.name)}</b></th>`,
     )
     .join('')}</tr>
-<tr>${d.vendors.map((v) => `<th${v.selected ? ' class="sel"' : ''}>ราคาต่อหน่วย</th><th${v.selected ? ' class="sel"' : ''}>ราคารวม</th>`).join('')}</tr>
+<tr>${d.vendors.map((v) => `${per === 3 ? `<th${v.selected ? ' class="sel"' : ''}>Q'TY</th>` : ''}<th${v.selected ? ' class="sel"' : ''}>ราคาต่อหน่วย</th><th${v.selected ? ' class="sel"' : ''}>ราคารวม</th>`).join('')}</tr>
 </thead>`;
 }
 
@@ -205,8 +211,12 @@ ${d.vendors
     const disc = v.disc[k];
     const part = it.split?.find((x) => x.v === vi);
     const won = it.split ? !!part : it.award === vi;
-    const share = part ? `<span class="sub sp">แบ่งซื้อ ${qtyFmt(part.qty)} ${esc(it.unit)} (${part.pct}%)<br>= ${money(part.line)}</span>` : '';
-    return `<td class="n">${money(v.net[k])}${disc ? `<span class="sub">${money(v.unit[k])} ลด ${esc(disc)}</span>` : ''}</td><td class="n${won ? ' won' : ''}">${won ? '<span class="tk" aria-label="สั่งซื้อ">✓</span>' : ''}${money(v.line[k])}${share}</td>`;
+    const split3 = perVendor(d) === 3;
+    const share = part ? (split3 ? `<span class="sub sp">แบ่งซื้อ ${part.pct}%<br>= ${money(part.line)}</span>` : `<span class="sub sp">แบ่งซื้อ ${qtyFmt(part.qty)} ${esc(it.unit)} (${part.pct}%)<br>= ${money(part.line)}</span>`) : '';
+    // Q'TY bought from this vendor: the split part, or the whole quantity where this vendor has the ✓
+    const q = part ? part.qty : !it.split && won ? it.qty : null;
+    const qcell = split3 ? `<td class="n${q != null ? ' won' : ''}">${q != null ? qtyFmt(q) : ''}</td>` : '';
+    return `${qcell}<td class="n">${money(v.net[k])}${disc ? `<span class="sub">${money(v.unit[k])} ลด ${esc(disc)}</span>` : ''}</td><td class="n${won ? ' won' : ''}">${won ? '<span class="tk" aria-label="สั่งซื้อ">✓</span>' : ''}${money(v.line[k])}${share}</td>`;
   })
   .join('')}</tr>`;
 }
@@ -222,20 +232,21 @@ function tfootHtml(d: SheetData) {
     first = false;
     return `<td colspan="4" rowspan="${rows}" class="blank"></td>`;
   };
+  const per = perVendor(d);
   const money3 = (label: string, pick: (v: SheetVendor) => number) =>
     `<tr>${lead()}<td colspan="2" class="lbl">${label}</td><td></td>${d.vendors
-      .map((v) => `<td></td><td class="n">${money(pick(v))}</td>`)
+      .map((v) => `<td${per === 3 ? ' colspan="2"' : ''}></td><td class="n">${money(pick(v))}</td>`)
       .join('')}</tr>`;
   const text3 = (label: string, pick: (v: SheetVendor) => string) =>
-    `<tr>${lead()}<td colspan="2" class="lbl">${label}</td><td></td>${d.vendors.map((v) => `<td colspan="2" class="c">${esc(pick(v))}</td>`).join('')}</tr>`;
-  const slot = (s?: { place: string; on: boolean }) =>
-    `<td class="dl">${s && s.place ? `<span class="cs-box">${s.on ? '✓' : ''}</span>${esc(s.place)}` : ''}</td>`;
+    `<tr>${lead()}<td colspan="2" class="lbl">${label}</td><td></td>${d.vendors.map((v) => `<td colspan="${per}" class="c">${esc(pick(v))}</td>`).join('')}</tr>`;
+  const slot = (s: { place: string; on: boolean } | undefined, span = 1) =>
+    `<td class="dl"${span > 1 ? ` colspan="${span}"` : ''}>${s && s.place ? `<span class="cs-box">${s.on ? '✓' : ''}</span>${esc(s.place)}` : ''}</td>`;
   const delivery = `<tr>${lead()}<td colspan="2" class="lbl">สถานที่จัดส่งสินค้า</td><td></td>${d.vendors
-    .map((v) => slot(v.delivery?.[0]) + slot(v.delivery?.[1]))
+    .map((v) => slot(v.delivery?.[0], per - 1) + slot(v.delivery?.[1]))
     .join('')}</tr>`;
   const awarded = showAw
     ? `<tr class="aw">${lead()}<td colspan="2" class="lbl">สั่งซื้อตาม ✓<br>(ก่อน VAT)</td><td></td>${d.vendors
-        .map((v) => `<td colspan="2" class="n">${v.awarded ? `✓ ${money(v.awarded)}` : '-'}</td>`)
+        .map((v) => `<td colspan="${per}" class="n">${v.awarded ? `✓ ${money(v.awarded)}` : '-'}</td>`)
         .join('')}</tr>`
     : '';
   return `<tbody class="cs-foot">
@@ -265,7 +276,7 @@ ${d.signers
 
 function mainTable(d: SheetData, L: ReturnType<typeof layoutCols>, rows: number[], withFoot: boolean, fillH: number) {
   const nv = d.vendors.length;
-  const cols = 7 + nv * 2;
+  const cols = 7 + nv * perVendor(d);
   const fill = fillH > 2 ? `<tr class="fill" style="height:${Math.floor(fillH)}px">${'<td></td>'.repeat(cols)}</tr>` : '';
   return `<table class="cs-main" style="font-size:${L.font}px;border-top:none">${colgroup(L, nv)}${theadHtml(d)}<tbody>${rows
     .map((k) => rowHtml(d, k))
@@ -308,7 +319,7 @@ function paginate(d: SheetData, m: { head: number; thead: number; rows: number[]
 export async function renderSheet(host: HTMLElement, d: SheetData): Promise<number> {
   const doc = host.ownerDocument;
   ensureStyle(doc);
-  const L = layoutCols(d.vendors.length);
+  const L = layoutCols(d.vendors.length, perVendor(d));
 
   // 1. off-screen copy with every row, to measure heights
   const meas = doc.createElement('div');
