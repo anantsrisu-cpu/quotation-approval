@@ -23,6 +23,8 @@ export interface SheetItem {
   reportNo?: string; // printed after the description
   /** vendor ticked ✓ for this item (index into vendors) */
   award?: number | null;
+  /** แบ่งซื้อ: quantity bought from each vendor (v = index into vendors) */
+  split?: { v: number; qty: number; pct: number; line: number }[] | null;
 }
 export interface SheetVendor {
   name: string;
@@ -110,6 +112,7 @@ const CSS = `
 .cs-main tbody td{vertical-align:top}
 .cs-main .sel{background:#FBF6EF}
 .cs-main td.won{background:#EAF3E6;font-weight:600}
+.cs-main td.won .sub.sp{color:#1E6B2E;font-weight:600}
 .cs-main .tk{float:left;font-weight:700;color:#1E6B2E;font-size:1.15em;line-height:1}
 .cs-foot td.dl{font-size:.92em;background:#fff;white-space:normal;line-height:1.25}
 .cs-foot td.dl .cs-box{width:10px;height:10px;line-height:8px;font-size:9px;margin-right:3px}
@@ -200,8 +203,10 @@ function rowHtml(d: SheetData, k: number) {
 ${d.vendors
   .map((v, vi) => {
     const disc = v.disc[k];
-    const won = it.award === vi;
-    return `<td class="n">${money(v.net[k])}${disc ? `<span class="sub">${money(v.unit[k])} ลด ${esc(disc)}</span>` : ''}</td><td class="n${won ? ' won' : ''}">${won ? '<span class="tk" aria-label="สั่งซื้อ">✓</span>' : ''}${money(v.line[k])}</td>`;
+    const part = it.split?.find((x) => x.v === vi);
+    const won = it.split ? !!part : it.award === vi;
+    const share = part ? `<span class="sub sp">แบ่งซื้อ ${qtyFmt(part.qty)} ${esc(it.unit)} (${part.pct}%)<br>= ${money(part.line)}</span>` : '';
+    return `<td class="n">${money(v.net[k])}${disc ? `<span class="sub">${money(v.unit[k])} ลด ${esc(disc)}</span>` : ''}</td><td class="n${won ? ' won' : ''}">${won ? '<span class="tk" aria-label="สั่งซื้อ">✓</span>' : ''}${money(v.line[k])}${share}</td>`;
   })
   .join('')}</tr>`;
 }

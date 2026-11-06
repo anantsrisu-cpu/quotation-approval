@@ -9,6 +9,8 @@ export function awardsOf(r: RequestRow, items: LineItem[] = itemsOf(r)) {
   return items.map((it) => (it.award != null && it.award >= 0 && it.award <= comps.length ? it.award : 0));
 }
 
+const vendorOf = (r: RequestRow, v: number) => (v === 0 ? r.vendor : (r.comparisons || [])[v - 1]?.vendor || '');
+
 /** The price a ticked line is bought at. */
 function boughtLine(r: RequestRow, it: LineItem, k: number, v: number, n: number) {
   if (v === 0) {
@@ -19,6 +21,11 @@ function boughtLine(r: RequestRow, it: LineItem, k: number, v: number, n: number
   const net = compNets(c, n)[k];
   const line = it.award_line ?? (c.lines?.[k] != null ? Number(c.lines[k]) : r2(net * it.qty));
   return { vendor: c.vendor, unit: compPrices(c)[k] || 0, disc: compDiscounts(c, n)[k], net, line };
+}
+
+/** แบ่งซื้อ parts of an item (empty = bought from one vendor) */
+export function splitOf(it: LineItem) {
+  return (it.split || []).map((x) => ({ v: x.v, qty: Number(x.qty), pct: x.pct ?? r2((Number(x.qty) / (it.qty || 1)) * 100), line: x.line }));
 }
 
 /** ☑ place · ☐ place */
@@ -88,21 +95,23 @@ export function ItemsTable({ r }: { r: RequestRow }) {
                   {it.report_no && <div className="note" style={{ color: 'var(--ink-2)' }}>รายงานเลขที่ {it.report_no}</div>}
                   {multi && (
                     <div className="note" style={{ color: 'var(--sage-ink)', fontWeight: 600 }}>
-                      ✓ ซื้อจาก เจ้าที่ {aw[i] + 1} {b.vendor}
-                      {it.award_reason && <span style={{ color: 'var(--bad)', fontWeight: 400 }}> · ไม่ใช่ราคาต่ำสุด: {it.award_reason}</span>}
+                      {splitOf(it).length
+                        ? <>✓ แบ่งซื้อ: {splitOf(it).map((x) => `เจ้าที่ ${x.v + 1} ${vendorOf(r, x.v)} ${x.qty.toLocaleString('en-US')} ${it.unit} (${x.pct}%)`).join(' + ')}</>
+                        : <>✓ ซื้อจาก เจ้าที่ {aw[i] + 1} {b.vendor}</>}
+                      {it.award_reason && <span style={{ color: 'var(--bad)', fontWeight: 400 }}> · {splitOf(it).length ? 'เหตุผล' : 'ไม่ใช่ราคาต่ำสุด'}: {it.award_reason}</span>}
                     </div>
                   )}
                 </td>
                 <td className="num" style={{ ...R, whiteSpace: 'nowrap' }}>{fmtQty(it.qty)} {it.unit}</td>
-                <td className="num" style={R}>{fmt(b.unit)}</td>
-                {hasDisc && <td className="num" style={R}>{b.disc || '—'}</td>}
+                <td className="num" style={R}>{splitOf(it).length ? <span className="note">แบ่งซื้อ</span> : fmt(b.unit)}</td>
+                {hasDisc && <td className="num" style={R}>{splitOf(it).length ? '—' : b.disc || '—'}</td>}
                 {hasDisc && <td className="num" style={R}><b>{fmt(net)}</b></td>}
                 <td className="num" style={R}>
                   {it.prev_price != null ? fmt(it.prev_price) : <span className="note">—</span>}
                   {(it.prev_vendor || it.prev_date) && <div className="note" style={{ whiteSpace: 'normal' }}>{[it.prev_vendor, it.prev_date ? dOnly(it.prev_date) : ''].filter(Boolean).join(' · ')}</div>}
                 </td>
                 <td style={R}><PrevPct pct={pct} /></td>
-                <td className="num" style={R}>{fmt(b.line)}</td>
+                <td className="num" style={R}>{fmt(splitOf(it).length ? it.award_line ?? b.line : b.line)}</td>
               </tr>
             );
           })}
@@ -127,14 +136,27 @@ export function CompareTable({ r }: { r: RequestRow }) {
   const line1 = items.map((it) => it.line_total ?? r2(netOf(it) * it.qty));
   const sub1 = r2(line1.reduce((s, x) => s + x, 0));
   const lineOf = (v: number, k: number) => (v === 0 ? line1[k] : boughtLine(r, items[k], k, v, n).line);
-  const byVendor = [0, ...comps.map((_, i) => i + 1)].map((v) => r2(items.reduce((s, _, k) => s + (aw[k] === v ? lineOf(v, k) : 0), 0)));
-  const cell = (price: number, disc: string, net: number, line: number, won: boolean) => (
-    <>
-      {disc ? <><span className="note">{fmt(price)} ลด {disc}</span><br /><b>{fmt(net)}</b></> : fmt(price)}
-      <div className="note">= {fmt(line)}</div>
-      {won && <div style={{ color: 'var(--sage-ink)', fontWeight: 700 }}>✓ สั่งซื้อ</div>}
-    </>
-  );
+  const partOf = (k: number, v: number) => splitOf(items[k]).find((x) => x.v === v);
+  const isWon = (k: number, v: number) => (splitOf(items[k]).length ? !!partOf(k, v) : aw[k] === v);
+  const byVendor = [0, ...comps.map((_, i) => i + 1)].map((v) =>
+    r2(items.reduce((s, it, k) => {
+      const sp = splitOf(it);
+      if (sp.length) return s + sp.filter((x) => x.v === v).reduce((t, x) => t + (x.line ?? r2(compNetAt(v, k) * x.qty)), 0);
+      return s + (aw[k] === v ? lineOf(v, k) : 0);
+    }, 0)));
+  function compNetAt(v: number, k: number) {
+    return v === 0 ? netOf(items[k]) : compNets(comps[v - 1], n)[k];
+  }
+  const cell = (price: number, disc: string, net: number, line: number, won: boolean, k: number, v: number) => {
+    const part = partOf(k, v);
+    return (
+      <>
+        {disc ? <><span className="note">{fmt(price)} ลด {disc}</span><br /><b>{fmt(net)}</b></> : fmt(price)}
+        <div className="note">= {fmt(line)}</div>
+        {won && <div style={{ color: 'var(--sage-ink)', fontWeight: 700 }}>{part ? `✓ แบ่งซื้อ ${part.qty.toLocaleString('en-US')} (${part.pct}%)` : '✓ สั่งซื้อ'}</div>}
+      </>
+    );
+  };
   return (
     <div className="tw">
       <table className="t cmp" style={{ minWidth: 420 + comps.length * 130 }}>
@@ -153,13 +175,13 @@ export function CompareTable({ r }: { r: RequestRow }) {
               <td className="note">{k + 1}</td>
               <td>
                 <span className="mono" style={{ fontSize: 12 }}>{it.sku}</span> · {it.product_name}
-                {it.award_reason && <div className="note" style={{ color: 'var(--bad)' }}>ไม่ใช่ราคาต่ำสุด: {it.award_reason}</div>}
+                {it.award_reason && <div className="note" style={{ color: 'var(--bad)' }}>{splitOf(it).length ? 'แบ่งซื้อ เหตุผล' : 'ไม่ใช่ราคาต่ำสุด'}: {it.award_reason}</div>}
               </td>
               <td className="num" style={{ ...R, whiteSpace: 'nowrap' }}>{fmtQty(it.qty)} {it.unit}</td>
-              <td className={`num sel${aw[k] === 0 ? ' won' : ''}`} style={R}>{cell(it.unit_price, normDiscount(it.discount), netOf(it), line1[k], aw[k] === 0)}</td>
+              <td className={`num sel${isWon(k, 0) ? ' won' : ''}`} style={R}>{cell(it.unit_price, normDiscount(it.discount), netOf(it), line1[k], isWon(k, 0), k, 0)}</td>
               {comps.map((c, i) => (
-                <td key={i} className={`num${aw[k] === i + 1 ? ' won' : ''}`} style={R}>
-                  {cell(compPrices(c)[k] || 0, compDiscounts(c, n)[k], compNets(c, n)[k], lineOf(i + 1, k), aw[k] === i + 1)}
+                <td key={i} className={`num${isWon(k, i + 1) ? ' won' : ''}`} style={R}>
+                  {cell(compPrices(c)[k] || 0, compDiscounts(c, n)[k], compNets(c, n)[k], lineOf(i + 1, k), isWon(k, i + 1), k, i + 1)}
                 </td>
               ))}
             </tr>

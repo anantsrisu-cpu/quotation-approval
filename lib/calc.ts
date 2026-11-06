@@ -17,6 +17,8 @@ export interface DraftItem {
   /** vendor ticked ✓ for this item (0 = เจ้าที่ 1, 1 = first comparison …); null = the cheapest */
   award: number | null;
   award_reason: string;
+  /** แบ่งซื้อ: quantity typed per vendor column (0 = เจ้าที่ 1 …), '' = none; null = not split */
+  split: string[] | null;
 }
 /** Comparison vendor as typed: one unit price and discount per line item, same order as the items. */
 export interface DraftComp {
@@ -29,7 +31,7 @@ export interface DraftComp {
   delivery: DeliverySlot[];
 }
 
-export const blankItem = (unit = 'ชิ้น'): DraftItem => ({ sku: '', description: '', qty: '1', unit, unit_price: '', discount: '', prev_price: '', prev_vendor: '', prev_date: '', brand: '', report_no: '', award: null, award_reason: '' });
+export const blankItem = (unit = 'ชิ้น'): DraftItem => ({ sku: '', description: '', qty: '1', unit, unit_price: '', discount: '', prev_price: '', prev_vendor: '', prev_date: '', brand: '', report_no: '', award: null, award_reason: '', split: null });
 export const blankComp = (n: number): DraftComp => ({ vendor: '', prices: Array(n).fill(''), discounts: Array(n).fill(''), credit_days: '', lead_days: '', warranty: '', delivery: [] });
 
 /** % change of the new (net) unit price against the previous price (null when there is no previous price). */
@@ -96,7 +98,12 @@ export function calcItems(items: DraftItem[], vatRate: number, comps: DraftComp[
     const complete = cl.length > 0 && cl.every((x) => x.up > 0 && !x.discErr);
     return { vendor: c.vendor, lines: cl, sub: csub, total: ctot, diff: r2(ctot - q1Total), complete };
   });
-  // ✓ per item: the cheapest priced line, unless another vendor was ticked
+  const netAt = (v: number, k: number) => (v === 0 ? lines[k].net : cs[v - 1]?.lines[k]?.net ?? 0);
+  const usable = (v: number, k: number) => {
+    const x = v === 0 ? lines[k] : cs[v - 1]?.lines[k];
+    return !!x && x.up > 0 && !x.discErr;
+  };
+  // ✓ per item: the cheapest priced line, unless another vendor was ticked or the quantity is split
   const awards = lines.map((l, k) => {
     let best = 0;
     let bestLine = l.line;
@@ -107,17 +114,33 @@ export function calcItems(items: DraftItem[], vatRate: number, comps: DraftComp[
         bestLine = x.line;
       }
     });
+    const sp = items[k].split;
+    if (sp && cs.length) {
+      // แบ่งซื้อ: each vendor's part is bought at that vendor's net price
+      const parts = sp
+        .map((q, v) => ({ v, qty: num(q) }))
+        .filter((x) => x.v <= cs.length && x.qty > 0)
+        .map((x) => ({ ...x, line: r2(netAt(x.v, k) * x.qty), pct: l.q > 0 ? r2((x.qty / l.q) * 100) : 0, ok: usable(x.v, k) }));
+      const sum = r2(parts.reduce((s, x) => s + x.qty, 0));
+      const pick = parts.length ? parts.reduce((a, b) => (b.qty > a.qty ? b : a)).v : best;
+      const err =
+        parts.length < 2 ? 'เลือกอย่างน้อย 2 เจ้า' : parts.some((x) => !x.ok) ? 'เจ้าที่เลือกยังไม่มีราคา' : sum !== l.q ? `รวม ${sum} จาก ${l.q}` : null;
+      return { best, pick, line: r2(parts.reduce((s, x) => s + x.line, 0)), override: true, split: parts, sum, splitErr: err };
+    }
     const want = items[k].award;
     const pick = want != null && want >= 0 && want <= cs.length ? want : best;
     const line = pick === 0 ? l.line : cs[pick - 1].lines[k].line;
-    return { best, pick, line, override: pick !== best };
+    return { best, pick, line, override: pick !== best, split: null as null | { v: number; qty: number; line: number; pct: number; ok: boolean }[], sum: l.q, splitErr: null as string | null };
   });
   const sub = r2(awards.reduce((s, a) => s + a.line, 0));
   const vat = r2(sub * vatRate);
   const total = r2(sub + vat);
   // ticked amount per vendor (0 = เจ้าที่ 1)
-  const byVendor = [0, ...cs.map(() => 0)].map((_, v) => r2(awards.reduce((s, a) => s + (a.pick === v ? a.line : 0), 0)));
-  return { lines, sub, vat, total, q1Sub, q1Total, comps: cs, awards, byVendor };
+  const byVendor = [0, ...cs.map(() => 0)].map((_, v) =>
+    r2(awards.reduce((s, a) => s + (a.split ? a.split.filter((x) => x.v === v).reduce((t, x) => t + x.line, 0) : a.pick === v ? a.line : 0), 0)));
+  /** items bought (wholly or partly) from vendor v */
+  const countFor = (v: number) => awards.filter((a) => (a.split ? a.split.some((x) => x.v === v) : a.pick === v)).length;
+  return { lines, sub, vat, total, q1Sub, q1Total, comps: cs, awards, byVendor, countFor };
 }
 
 /** Line items of a request (older single-item requests are shown as one line). */

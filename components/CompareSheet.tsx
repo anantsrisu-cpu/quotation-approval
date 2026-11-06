@@ -55,8 +55,17 @@ export function useSheetData(r: RequestRow, steps: RequestStep[], draft: boolean
     };
   });
   const vendors = [selected, ...others];
+  // แบ่งซื้อ parts (older requests: none)
+  const splitOf = (k: number) =>
+    (items[k].split || []).filter((x) => x.v >= 0 && x.v < vendors.length).map((x) => ({
+      v: x.v, qty: Number(x.qty), pct: x.pct ?? r2((Number(x.qty) / (items[k].qty || 1)) * 100), line: x.line ?? r2(vendors[x.v].net[k] * Number(x.qty)),
+    }));
   vendors.forEach((v, vi) => {
-    v.awarded = r2(award.reduce((s, a, k) => s + (a === vi ? v.line[k] : 0), 0));
+    v.awarded = r2(award.reduce((s, a, k) => {
+      const sp = splitOf(k);
+      if (sp.length) return s + sp.filter((x) => x.v === vi).reduce((t, x) => t + x.line, 0);
+      return s + (a === vi ? v.line[k] : 0);
+    }, 0));
     v.selected = v.awarded > 0;
   });
 
@@ -100,8 +109,12 @@ export function useSheetData(r: RequestRow, steps: RequestStep[], draft: boolean
   if (r.no_comp && r.no_comp_reason?.trim()) notes.push(`เหตุผลที่ไม่มีคู่เทียบ: ${r.no_comp_reason.trim()}`);
   if (r.low_reason?.trim()) notes.push(`เหตุผลที่ไม่เลือกราคาต่ำสุด: ${r.low_reason.trim()}`);
   items.forEach((it, k) => {
-    if (it.award_reason?.trim())
-      notes.push(`รายการที่ ${k + 1}${it.sku ? ` (${it.sku})` : ''}: ซื้อเจ้าที่ ${award[k] + 1} ${vendors[award[k]]?.name || ''} — ${it.award_reason.trim()}`);
+    if (!it.award_reason?.trim()) return;
+    const sp = splitOf(k);
+    const what = sp.length
+      ? `แบ่งซื้อ ${sp.map((x) => `เจ้าที่ ${x.v + 1} ${x.qty.toLocaleString('en-US')} ${it.unit} (${x.pct}%)`).join(' + ')}`
+      : `ซื้อเจ้าที่ ${award[k] + 1} ${vendors[award[k]]?.name || ''}`;
+    notes.push(`รายการที่ ${k + 1}${it.sku ? ` (${it.sku})` : ''}: ${what} — ${it.award_reason.trim()}`);
   });
 
   return {
@@ -128,6 +141,7 @@ export function useSheetData(r: RequestRow, steps: RequestStep[], draft: boolean
       prevDate: it.prev_date || null,
       reportNo: it.report_no || '',
       award: award[k],
+      split: splitOf(k).length ? splitOf(k) : null,
     })),
     vendors,
     vatRate: rate,

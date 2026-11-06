@@ -4,7 +4,7 @@ import { useApp } from '@/components/AppProvider';
 import { AdminGate } from '@/components/AdminGate';
 import { PageHead } from '@/components/ui';
 import { fmt, num } from '@/lib/format';
-import type { Company, DeliveryPlace, Department, Position, Tier, UnitRow } from '@/lib/types';
+import type { Company, DeliveryPlace, Department, Position, Profile, Tier, UnitRow } from '@/lib/types';
 
 type TierEdit = Omit<Tier, 'id' | 'max_amount'> & { id?: number; max: string };
 const slug = (s: string) => s.trim().toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
@@ -223,10 +223,86 @@ function Tiers() {
   );
 }
 
+type DeptImport = { file: string; add: Department[]; upd: Department[]; same: number; errs: { row: number; msg: string }[] };
+const yes = (v: unknown) => !/^(n|no|0|false|ไม่|ปิด)/i.test(String(v ?? '').trim());
+
 function Departments() {
   const { sb, departments, run, toast, reloadRefs } = useApp();
   const [rows, setRows] = useState<(Department & { isNew?: boolean })[]>([]);
+  const [pv, setPv] = useState<DeptImport | null>(null);
+  const [busy, setBusy] = useState(false);
   useEffect(() => setRows(departments.map((d) => ({ ...d }))), [departments]);
+
+  /** Excel with the current departments, ready to edit and upload back */
+  async function template() {
+    const { default: writeExcelFile } = await import('write-excel-file/browser');
+    const head = ['รหัส (อังกฤษ)', 'ชื่อฝ่าย (ไทย)', 'ชื่อฝ่าย (อังกฤษ)', 'ลำดับ', 'ใช้งาน (Y/N)'];
+    const body = departments.length
+      ? departments.map((d) => [d.id, d.th, d.en, String(d.sort), d.active ? 'Y' : 'N'])
+      : [['purchasing', 'ฝ่ายจัดซื้อ', 'Purchasing', '10', 'Y']];
+    await writeExcelFile([head, ...body].map((r) => r.map((value) => ({ value, type: String }))), {
+      columns: [{ width: 18 }, { width: 32 }, { width: 28 }, { width: 8 }, { width: 14 }],
+    }).toFile('departments-template.xlsx');
+  }
+  async function readFile(file: File) {
+    try {
+      let data: unknown[][];
+      if (/\.csv$/i.test(file.name)) data = file.size ? (await file.text()).split(/\r?\n/).map((l) => l.split(',')) : [];
+      else {
+        const { readSheet } = await import('read-excel-file/browser');
+        data = (await readSheet(file)) as unknown[][];
+      }
+      if (!data.length) return toast('bad', 'ไฟล์ว่าง · Empty file', '');
+      const hd = data[0].map((h) => String(h ?? '').trim().toLowerCase());
+      const find = (re: RegExp, not?: RegExp) => hd.findIndex((h) => re.test(h) && !(not && not.test(h)));
+      const iId = find(/รหัส|code|^id$/);
+      const iTh = find(/ไทย|thai|^th$|^ชื่อฝ่าย$/, /รหัส|code/);
+      const iEn = find(/อังกฤษ|english|^en$/, /รหัส|code/);
+      const iSort = find(/ลำดับ|sort|order/);
+      const iAct = find(/ใช้งาน|active/);
+      if (iTh < 0) return toast('bad', 'ไม่พบคอลัมน์ชื่อฝ่าย (ไทย) · Thai name column not found', 'ใช้ไฟล์จากปุ่ม “ดาวน์โหลด Template” · Use the template');
+      const cur = new Map(departments.map((d) => [d.id, d]));
+      const nextCode = (taken: Map<string, number>) => {
+        let i = 1;
+        while (cur.has(`dept-${i}`) || taken.has(`dept-${i}`)) i++;
+        return `dept-${i}`;
+      };
+      const seen = new Map<string, number>();
+      const out: DeptImport = { file: file.name, add: [], upd: [], same: 0, errs: [] };
+      data.slice(1, 1001).forEach((r, k) => {
+        const row = k + 2;
+        const th = String(r[iTh] ?? '').trim();
+        const en = iEn > -1 && iEn !== iTh ? String(r[iEn] ?? '').trim() : '';
+        let id = slug(String((iId > -1 ? r[iId] : '') ?? '') || en);
+        if (!th && !id) return;
+        if (!th) return out.errs.push({ row, msg: 'ไม่มีชื่อฝ่าย (ไทย) · Missing Thai name' });
+        // Thai-only row: the same Thai name keeps its code, otherwise a new code dept-N
+        if (!id) id = departments.find((d) => d.th === th)?.id || nextCode(seen);
+        if (seen.has(id)) return out.errs.push({ row, msg: `รหัส “${id}” ซ้ำกับแถว ${seen.get(id)} · Duplicate code` });
+        seen.set(id, row);
+        const ex = cur.get(id);
+        const sortV = iSort > -1 && String(r[iSort] ?? '').trim() !== '' ? Number(r[iSort]) || 0 : ex?.sort ?? (departments.length + out.add.length + 1) * 10;
+        const rec: Department = { id, th, en: en || ex?.en || '', sort: sortV, active: iAct > -1 ? yes(r[iAct]) : true };
+        if (!ex) out.add.push(rec);
+        else if (ex.th !== rec.th || ex.en !== rec.en || ex.sort !== rec.sort || ex.active !== rec.active) out.upd.push(rec);
+        else out.same++;
+      });
+      setPv(out);
+    } catch (e: any) {
+      toast('bad', 'อ่านไฟล์ไม่สำเร็จ · Could not read the file', e?.message || 'ใช้ไฟล์ .xlsx · Use an .xlsx file');
+    }
+  }
+  async function doImport() {
+    if (!pv) return;
+    setBusy(true);
+    const { ok } = await run('import-departments', sb.from('departments').upsert([...pv.add, ...pv.upd]));
+    setBusy(false);
+    if (ok) {
+      toast('ok', 'นำเข้าฝ่ายแล้ว · Departments imported', `เพิ่ม ${pv.add.length} · แก้ไข ${pv.upd.length}`);
+      setPv(null);
+      reloadRefs();
+    }
+  }
   async function save() {
     const fixed = rows.map((d) => ({ ...d, id: d.isNew ? slug(d.id || d.en || '') : d.id }));
     if (fixed.some((d) => !d.id || !d.th.trim())) return toast('bad', 'กรอกรหัส (อังกฤษ) และชื่อฝ่ายให้ครบ · Code and Thai name required', '');
@@ -239,11 +315,27 @@ function Departments() {
     <div className="card">
       <div className="actions"><h2>ฝ่าย (ฝ่ายที่ขอซื้อ) · Departments</h2>
         <div className="row" style={{ gap: 8 }}>
+          <button className="btn sm" id="dept-template" onClick={template}>ดาวน์โหลด Template Excel</button>
+          <label className="btn sm" style={{ cursor: 'pointer' }}>นำเข้าจาก Excel · Import
+            <input type="file" id="dept-file" accept=".xlsx,.csv" className="sr" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) readFile(f); }} />
+          </label>
           <button className="btn sm" onClick={() => setRows([...rows, { id: '', th: '', en: '', sort: (rows.at(-1)?.sort || 0) + 10, active: true, isNew: true }])}>+ เพิ่ม · Add</button>
           <button className="btn p sm" onClick={save}>บันทึก · Save</button>
         </div>
       </div>
-      <span className="note">แสดงเป็น “ฝ่ายที่ขอซื้อ” ในหัวตารางเปรียบเทียบ · Shown on the comparison sheet header. ปิดใช้งานแทนการลบ · Deactivate instead of deleting.</span>
+      <span className="note">แสดงเป็น “ฝ่ายที่ขอซื้อ” ในหัวตารางเปรียบเทียบ · Shown on the comparison sheet header. ปิดใช้งานแทนการลบ · Deactivate instead of deleting. · เพิ่มหลายฝ่ายพร้อมกัน: ดาวน์โหลด Template (มีฝ่ายปัจจุบันอยู่แล้ว) แก้หรือเพิ่มแถว แล้วกด “นำเข้าจาก Excel” — รหัสที่มีอยู่แล้วจะถูกแก้ไข รหัสใหม่จะถูกเพิ่ม · เว้นรหัสว่างได้ ระบบตั้งรหัสให้</span>
+      {pv && (
+        <div className="imp-pv" role="status">
+          <b>{pv.file}</b>: เพิ่มใหม่ <b>{pv.add.length}</b> · แก้ไข <b>{pv.upd.length}</b> · เหมือนเดิม {pv.same}{pv.errs.length ? <> · <span style={{ color: 'var(--bad)' }}>ข้าม {pv.errs.length} แถว</span></> : null}
+          {pv.add.length > 0 && <div className="note">เพิ่ม: {pv.add.map((d) => `${d.th} (${d.id})`).join(', ')}</div>}
+          {pv.upd.length > 0 && <div className="note">แก้ไข: {pv.upd.map((d) => `${d.th} (${d.id})`).join(', ')}</div>}
+          {pv.errs.length > 0 && <div className="note" style={{ color: 'var(--bad)' }}>{pv.errs.slice(0, 8).map((e) => `แถว ${e.row}: ${e.msg}`).join(' · ')}</div>}
+          <div className="row" style={{ gap: 8, marginTop: 8 }}>
+            <button className="btn sm" onClick={() => setPv(null)}>ยกเลิก · Cancel</button>
+            <button className="btn p sm" id="dept-import" disabled={busy || !(pv.add.length + pv.upd.length)} onClick={doImport}>{busy ? 'กำลังนำเข้า…' : `นำเข้า ${pv.add.length + pv.upd.length} ฝ่าย · Import`}</button>
+          </div>
+        </div>
+      )}
       {rows.map((d, i) => (
         <div key={i} className="row" style={{ gap: 10, alignItems: 'flex-end', border: '1px solid var(--beige)', borderRadius: 10, padding: 10 }}>
           <label className="f" style={{ flex: '1 1 120px' }}>รหัส · Code<input className="in mono" value={d.id} disabled={!d.isNew} placeholder="e.g. sales" onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, id: e.target.value } : x)))} /></label>
@@ -324,6 +416,148 @@ function Companies() {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+const RESET_WORD = 'ลบทั้งหมด';
+/** UAT clean-up before go-live: every request, its files and history; numbering restarts. */
+function ResetRequests() {
+  const { sb, run, toast, refresh, bump } = useApp();
+  const [counts, setCounts] = useState<Record<string, number> | null>(null);
+  const [word, setWord] = useState('');
+  const [busy, setBusy] = useState('');
+  useEffect(() => {
+    Promise.all(['draft', 'pending', 'approved', 'rejected', 'cancelled'].map((st) =>
+      sb.from('requests').select('id', { count: 'exact', head: true }).eq('status', st).then(({ count }) => [st, count || 0] as const)))
+      .then((xs) => setCounts(Object.fromEntries(xs)));
+  }, [sb, bump]);
+  const total = counts ? Object.values(counts).reduce((a, b) => a + b, 0) : 0;
+  async function paths(table: 'request_files' | 'requests') {
+    const out: string[] = [];
+    for (let from = 0; ; from += 1000) {
+      const q = table === 'request_files'
+        ? sb.from('request_files').select('path').range(from, from + 999)
+        : sb.from('requests').select('letter_path').not('letter_path', 'is', null).range(from, from + 999);
+      const { data } = await q;
+      const rows = (data || []) as { path?: string; letter_path?: string | null }[];
+      rows.forEach((r) => { const p0 = r.path || r.letter_path; if (p0) out.push(p0); });
+      if (rows.length < 1000) return out;
+    }
+  }
+  async function go() {
+    if (word.trim() !== RESET_WORD) return;
+    setBusy('กำลังลบไฟล์แนบ…');
+    const files = await paths('request_files');
+    const letters = await paths('requests');
+    for (let i = 0; i < files.length; i += 100) await sb.storage.from('attachments').remove(files.slice(i, i + 100));
+    for (let i = 0; i < letters.length; i += 100) await sb.storage.from('letters').remove(letters.slice(i, i + 100));
+    setBusy('กำลังลบคำขอ…');
+    const { ok, data } = await run<number>('admin-reset-requests', sb.rpc('admin_reset_requests', { p_confirm: word.trim() }));
+    setBusy('');
+    if (ok) {
+      setWord('');
+      toast('ok', 'ล้างข้อมูลคำขอแล้ว · Requests cleared', `ลบ ${data ?? 0} คำขอ · คำขอถัดไปเริ่มเลข 0001 ใหม่`);
+      refresh();
+    }
+  }
+  return (
+    <div className="card danger-zone">
+      <h2>ล้างข้อมูลทดสอบก่อน Go-Live · Clear test data</h2>
+      <span className="note">ลบ<b>คำขอทุกใบ</b> (ทุกสถานะ) พร้อมไฟล์แนบ ประวัติ ขั้นตอนอนุมัติ และการแจ้งเตือนของคำขอ แล้ว<b>เริ่มเลขที่คำขอใหม่</b>จาก 0001 · ไม่ลบผู้ใช้ ลายเซ็น สินค้า และการตั้งค่า · ทำได้เฉพาะผู้ดูแลระบบ และกู้คืนไม่ได้</span>
+      <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+        {counts === null ? <div className="skeleton" style={{ width: 240 }} /> : (
+          <>
+            <span className="chip st-draft">ทั้งหมด {total}</span>
+            <span className="chip st-draft">ร่าง {counts.draft}</span>
+            <span className="chip st-pend">รออนุมัติ {counts.pending}</span>
+            <span className="chip st-ok">อนุมัติแล้ว {counts.approved}</span>
+            <span className="chip st-bad">ไม่อนุมัติ {counts.rejected}</span>
+            <span className="chip st-draft">ยกเลิก {counts.cancelled}</span>
+          </>
+        )}
+      </div>
+      <div className="row" style={{ gap: 10, alignItems: 'flex-end' }}>
+        <label className="f" htmlFor="reset-word" style={{ flex: '1 1 260px' }}>พิมพ์คำว่า <b>{RESET_WORD}</b> เพื่อยืนยัน · Type to confirm
+          <input className="in" id="reset-word" value={word} autoComplete="off" onChange={(e) => setWord(e.target.value)} placeholder={RESET_WORD} />
+        </label>
+        <button className="btn" id="reset-go" disabled={word.trim() !== RESET_WORD || !!busy || !total} onClick={go}
+          style={word.trim() === RESET_WORD && total ? { background: 'var(--bad-solid)', borderColor: 'var(--bad-solid)', color: '#fff' } : undefined}>
+          {busy || `ลบคำขอทั้งหมด ${total} ใบ · Delete all`}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Which companies each approver signs for (empty = every company). */
+function ApproverCompanies() {
+  const { sb, positions, companies, tiers, run, toast, bump } = useApp();
+  const [rows, setRows] = useState<Profile[] | null>(null);
+  const [saved, setSaved] = useState<Record<string, string>>({});
+  useEffect(() => {
+    sb.from('profiles').select('id,email,name,title,dept,roles,position,status,companies').eq('status', 'active').contains('roles', ['approver'])
+      .then(({ data }) => {
+        const list = ((data as Profile[]) || []).map((p) => ({ ...p, companies: p.companies || [] }));
+        setRows(list);
+        setSaved(Object.fromEntries(list.map((p) => [p.id, (p.companies || []).slice().sort().join(',')])));
+      });
+  }, [sb, bump]);
+  const order = (code: string | null) => positions.find((p) => p.code === code)?.sort ?? 9999;
+  const cos = companies.filter((c) => c.active);
+  const list = (rows || []).slice().sort((a, b) => order(a.position) - order(b.position) || a.name.localeCompare(b.name, 'th'));
+  const toggle = (id: string, co: string, on: boolean) =>
+    setRows((rs) => (rs || []).map((p) => (p.id === id ? { ...p, companies: on ? [...(p.companies || []), co] : (p.companies || []).filter((x) => x !== co) } : p)));
+  const changed = list.filter((p) => (p.companies || []).slice().sort().join(',') !== saved[p.id]);
+  async function save() {
+    for (const p of changed) {
+      const { ok } = await run('save-approver-companies', sb.from('profiles').update({ companies: p.companies || [] }).eq('id', p.id));
+      if (!ok) return;
+    }
+    toast('ok', 'บันทึกผู้อนุมัติตามบริษัทแล้ว · Saved', `${changed.length} คน · คำขอที่ส่งหลังจากนี้ใช้ค่าใหม่`);
+    setSaved(Object.fromEntries(list.map((p) => [p.id, (p.companies || []).slice().sort().join(',')])));
+  }
+  // positions used by any tier that have nobody for a company
+  const used = Array.from(new Set(tiers.flatMap((t) => t.steps)));
+  const gaps = cos.flatMap((c) =>
+    used.filter((pos) => !list.some((p) => p.position === pos && (!(p.companies || []).length || (p.companies || []).includes(c.id))))
+      .map((pos) => `${c.th}: ไม่มี${positions.find((x) => x.code === pos)?.th || pos}`));
+  return (
+    <div className="card">
+      <div className="actions"><h2>ผู้อนุมัติตามบริษัท · Approvers by company</h2>
+        <button className="btn p sm" onClick={save} disabled={!changed.length}>บันทึก{changed.length ? ` (${changed.length})` : ''} · Save</button>
+      </div>
+      <span className="note">ติ๊กบริษัทที่ผู้อนุมัติแต่ละคนลงนามให้ ระบบเลือกผู้อนุมัติตามตำแหน่ง → บริษัทของคำขอ → ฝ่าย · <b>ไม่ติ๊กเลย = อนุมัติได้ทุกบริษัท</b> · คนที่ติ๊กบริษัทนั้นไว้จะถูกเลือกก่อนคนที่อนุมัติได้ทุกบริษัท</span>
+      {rows === null ? <div className="skeleton" /> : !list.length ? <p className="note" style={{ margin: 0 }}>ยังไม่มีผู้อนุมัติที่ใช้งาน · No active approvers</p> : (
+        <div className="tw">
+          <table className="t" style={{ minWidth: 520 + cos.length * 120 }}>
+            <thead>
+              <tr>
+                <th>ตำแหน่ง · Position</th>
+                <th>ผู้อนุมัติ · Approver</th>
+                {cos.map((c) => <th key={c.id} style={{ textAlign: 'center' }}>{c.th}</th>)}
+                <th>ผล · Result</th>
+              </tr>
+            </thead>
+            <tbody>
+              {list.map((p) => (
+                <tr key={p.id}>
+                  <td>{positions.find((x) => x.code === p.position)?.th || p.position || '—'}</td>
+                  <td><b style={{ fontWeight: 500 }}>{p.name || p.email}</b><div className="note">{p.title}</div></td>
+                  {cos.map((c) => (
+                    <td key={c.id} style={{ textAlign: 'center' }}>
+                      <input type="checkbox" id={`ac-${p.id}-${c.id}`} style={{ width: 20, height: 20, accentColor: 'var(--brown)' }} checked={(p.companies || []).includes(c.id)}
+                        aria-label={`${p.name} อนุมัติให้ ${c.th}`} onChange={(e) => toggle(p.id, c.id, e.target.checked)} />
+                    </td>
+                  ))}
+                  <td className="note">{(p.companies || []).length ? `เฉพาะ ${cos.filter((c) => (p.companies || []).includes(c.id)).length} บริษัทที่ติ๊ก` : 'ทุกบริษัท'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {gaps.length > 0 && <div className="warn-box">ยังส่งคำขอไม่ได้ในบางกรณี: {gaps.join(' · ')}</div>}
     </div>
   );
 }
@@ -424,11 +658,13 @@ export default function SettingsPage() {
       <PageHead title="ตั้งค่าระบบ" lead="Application settings — price tiers, approver positions, departments, companies, units, delivery places and letter details" />
       <Tiers />
       <Positions />
+      <ApproverCompanies />
       <General />
       <Companies />
       <Departments />
       <Units />
       <Places />
+      <ResetRequests />
     </AdminGate>
   );
 }

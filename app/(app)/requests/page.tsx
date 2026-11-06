@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useApp } from '@/components/AppProvider';
 import { LIST_COLS, Loading, PageHead, ReqTable } from '@/components/ui';
+import { DeleteRequestButton, canDelete } from '@/components/DeleteRequest';
 import type { RequestRow } from '@/lib/types';
 
 export default function MyRequests() {
@@ -27,7 +28,8 @@ export default function MyRequests() {
         <div className="tile"><span>อนุมัติแล้ว · Approved</span><b>{c('approved')}</b></div>
         <div className="tile"><span>ไม่อนุมัติ · Rejected</span><b>{c('rejected')}</b></div>
       </div>
-      {list === null ? <Loading /> : <ReqTable list={list} empty='ยังไม่มีคำขอ กด "สร้างคำขอใหม่" เพื่อเริ่ม · No requests yet — press New request to start' />}
+      {list === null ? <Loading /> : <ReqTable list={list} empty='ยังไม่มีคำขอ กด "สร้างคำขอใหม่" เพื่อเริ่ม · No requests yet — press New request to start'
+        actions={(r) => (canDelete(r) ? <DeleteRequestButton r={r} /> : null)} />}
     </>
   );
 }

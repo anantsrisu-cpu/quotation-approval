@@ -12,6 +12,8 @@ export interface Profile {
   roles: Role[];
   position: string | null;
   status: ProfileStatus;
+  /** companies this approver signs for (empty = every company) */
+  companies?: string[];
   requested_roles: Role[];
   apply_note: string;
   review_note: string;
@@ -66,6 +68,8 @@ export interface LineItem {
   award_auto?: number;
   award_reason?: string;
   award_line?: number;
+  /** แบ่งซื้อ: parts bought from each vendor (v = 0 เจ้าที่ 1, 1 = first comparison …) */
+  split?: { v: number; qty: number; net?: number; line?: number; pct?: number }[] | null;
   line_total?: number;
   prev_diff_pct?: number | null;
 }

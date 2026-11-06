@@ -11,7 +11,7 @@ import type { Profile, ProfileStatus, Role, UserInvite } from '@/lib/types';
 const STATUS_TH: Record<ProfileStatus, string> = { new: 'ยังไม่สมัคร', pending: 'รอตรวจ', active: 'ใช้งาน', rejected: 'ไม่อนุมัติ', disabled: 'ปิดใช้งาน' };
 
 function Editor({ p, hasSig, onSaved }: { p: Profile; hasSig: boolean; onSaved: () => void }) {
-  const { sb, uid, departments, positions, run, toast } = useApp();
+  const { sb, uid, departments, positions, companies, run, toast } = useApp();
   const [e, setE] = useState<Profile>(p);
   const [sig, setSig] = useState<string | null | undefined>(undefined);
   const [pending, setPending] = useState<string | null>(null);
@@ -36,6 +36,7 @@ function Editor({ p, hasSig, onSaved }: { p: Profile; hasSig: boolean; onSaved: 
     const { ok } = await run('admin-save-user', sb.from('profiles').update({
       name: e.name.trim(), title: e.title.trim(), dept: e.dept || null, roles: e.roles,
       position: e.roles.includes('approver') ? e.position || null : null, status: e.status,
+      companies: e.roles.includes('approver') ? e.companies || [] : [],
     }).eq('id', p.id));
     let sigOk = true;
     const newSig = pending || pad.current?.getData();
@@ -89,6 +90,19 @@ function Editor({ p, hasSig, onSaved }: { p: Profile; hasSig: boolean; onSaved: 
           {positions.map((x) => <option key={x.code} value={x.code}>{x.th} · {x.en}</option>)}
         </select>
       </label>
+      {e.roles.includes('approver') && (
+        <fieldset style={{ border: 'none', margin: 0, padding: 0 }}>
+          <legend style={{ fontSize: 14, fontWeight: 500, padding: 0 }}>อนุมัติให้บริษัท · Signs for companies</legend>
+          {companies.filter((c) => c.active).map((c) => (
+            <label key={c.id} className="check">
+              <input type="checkbox" checked={(e.companies || []).includes(c.id)}
+                onChange={(x) => setE({ ...e, companies: x.target.checked ? [...(e.companies || []), c.id] : (e.companies || []).filter((y) => y !== c.id) })} />
+              {c.th}
+            </label>
+          ))}
+          <span className="note">ไม่ติ๊กเลย = อนุมัติได้ทุกบริษัท · None ticked = every company</span>
+        </fieldset>
+      )}
       <label className="f" htmlFor="u-st">สถานะบัญชี · Account status
         <select className="in" id="u-st" value={e.status} onChange={(x) => setE({ ...e, status: x.target.value as ProfileStatus })}>
           {(['active', 'disabled', 'pending', 'rejected', 'new'] as ProfileStatus[]).map((s) => <option key={s} value={s}>{STATUS_TH[s]} · {s}</option>)}

@@ -232,3 +232,15 @@ table.cmp tr.why input.in{min-width:0;width:100%}
 .unit-row{display:flex;gap:8px;align-items:flex-end;border:1px solid var(--beige);border-radius:10px;padding:10px}
 .unit-row.off{background:var(--soft);opacity:.75}
 .unit-row .check{padding-bottom:10px;white-space:nowrap}
+/* แบ่งซื้อ (split quantity between vendors) */
+.btn.on-split{border-color:var(--sage-ink);color:var(--sage-ink)}
+[id^="sb"].btn{white-space:nowrap}
+table.cmp .split-in{display:grid;grid-template-columns:1fr auto;gap:4px 6px;align-items:center;margin-top:6px}
+table.cmp .split-in .in{min-width:0;border-color:var(--sage-ink)}
+table.cmp .split-in .pct{font-weight:700;color:var(--sage-ink);font-variant-numeric:tabular-nums;min-width:52px;text-align:right}
+table.cmp .split-in .note{grid-column:1/-1;text-align:right}
+table.cmp tr.why.split td{background:var(--sage-bg)}
+.split-sum{font-size:14px;margin-bottom:6px}
+.imp-pv{border:1px solid var(--beige);background:var(--soft);border-radius:10px;padding:12px 14px;font-size:14px}
+.card.danger-zone{border:2px solid var(--bad-solid)}
+.card.danger-zone h2{color:var(--bad)}

@@ -78,6 +78,14 @@ function parsePasted(text: string): DraftItem[] {
     .map((c) => ({ ...blankItem(), sku: skuKey(c[0]), qty: c[1] || '1', unit_price: c[2] || '', discount: c[3] || '', prev_price: c[4] || '', description: c.slice(5).filter(Boolean).join(' ') }));
 }
 
+
+/** stored split parts [{v, qty}] → quantities typed per vendor column */
+function splitToDraft(parts: { v: number; qty: number }[]): string[] {
+  const out: string[] = Array(Math.max(...parts.map((x) => x.v)) + 1).fill('');
+  parts.forEach((x) => (out[x.v] = String(x.qty)));
+  return out;
+}
+
 export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string | null; copyFrom?: string | null; forUser?: string | null }) {
   const app = useApp();
   const { sb, me, settings, departments, companies, people, positions, places, run, toast, deptTh, has, name } = app;
@@ -138,7 +146,8 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
       const items: DraftItem[] = its.length
         ? its.map((it) => ({ sku: it.sku, description: it.description || '', qty: String(it.qty || 1), unit: it.unit || 'ชิ้น', unit_price: money(it.unit_price), discount: it.discount || '', prev_price: it.prev_price != null ? fmt(it.prev_price) : '', prev_vendor: it.prev_vendor || '', prev_date: it.prev_date || '', brand: it.brand || '', report_no: it.report_no || '',
             // keep a ✓ only where it differs from the automatic (cheapest) one
-            award: it.award != null && it.award !== it.award_auto ? it.award : null, award_reason: it.award_reason || '' }))
+            award: it.award != null && it.award !== it.award_auto && !it.split?.length ? it.award : null, award_reason: it.award_reason || '',
+            split: it.split?.length ? splitToDraft(it.split) : null }))
         : [blankItem()];
       const comps: DraftComp[] = (r.comparisons || []).map((c) => {
         const ps = compPrices(c);
@@ -208,6 +217,22 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
     setD((x) => (x && x.items.length > 1 ? { ...x, items: x.items.filter((_, j) => j !== i), comps: x.comps.map((c) => ({ ...c, prices: c.prices.filter((_, j) => j !== i), discounts: c.discounts.filter((_, j) => j !== i) })) } : x));
   const setPrice = (ci: number, k: number, v: string, field: 'prices' | 'discounts' = 'prices') =>
     setD((x) => (x ? { ...x, comps: x.comps.map((c, j) => (j === ci ? { ...c, [field]: c[field].map((p, m) => (m === k ? v : p)) } : c)) } : x));
+  /** แบ่งซื้อ on/off for item k */
+  const toggleSplit = (k: number, on: boolean) =>
+    setD((x) => (x ? { ...x, items: x.items.map((it, j) => (j === k ? { ...it, split: on ? Array(x.comps.length + 1).fill('') : null, award: null } : it)) } : x));
+  const setSplitQty = (k: number, v: number, q: string) =>
+    setD((x) => {
+      if (!x) return x;
+      return {
+        ...x,
+        items: x.items.map((it, j) => {
+          if (j !== k || !it.split) return it;
+          const sp = Array.from({ length: Math.max(it.split.length, x.comps.length + 1) }, (_, i) => it.split?.[i] ?? '');
+          sp[v] = q;
+          return { ...it, split: sp };
+        }),
+      };
+    });
   /** tick ✓ vendor v for item k (back to the cheapest = automatic, no reason needed) */
   const setAward = (k: number, v: number, best: number) =>
     setD((x) => (x ? { ...x, items: x.items.map((it, j) => (j === k ? { ...it, award: v === best ? null : v } : it)) } : x));
@@ -219,7 +244,9 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
       return {
         ...x,
         comps: x.comps.filter((_, j) => j !== ci),
-        items: x.items.map((it) => (it.award == null ? it : it.award === v ? { ...it, award: null, award_reason: '' } : it.award > v ? { ...it, award: it.award - 1 } : it)),
+        items: x.items
+          .map((it) => (it.split ? { ...it, split: it.split.filter((_, i) => i !== v) } : it))
+          .map((it) => (it.award == null ? it : it.award === v ? { ...it, award: null, award_reason: '' } : it.award > v ? { ...it, award: it.award - 1 } : it)),
       };
     });
   const addComp = () => setD((x) => (x ? { ...x, comps: [...x.comps, { ...blankComp(x.items.length), delivery: blankDelivery() }] } : x));
@@ -267,14 +294,14 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
     if (!d) return;
     let stale = false; // ignore answers that arrive after a newer amount was typed
     const t = setTimeout(async () => {
-      const { data } = await sb.rpc('preview_approvers', { p_total: c.total, p_dept: d.dept || null });
+      const { data } = await sb.rpc('preview_approvers', { p_total: c.total, p_dept: d.dept || null, p_company: d.company_id || null });
       if (!stale) setApprovers((data as ApproverPreview[]) || []);
     }, 250);
     return () => {
       stale = true;
       clearTimeout(t);
     };
-  }, [c.total, d?.dept, sb]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [c.total, d?.dept, d?.company_id, sb]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!d || !me) return <Loading rows={5} />;
 
@@ -313,7 +340,9 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
       if (parseDays(x.credit_days).error || parseDays(x.lead_days).error) missing.push(`คู่เทียบ ${i + 1}: เครดิต / Lead time ต้องเป็นจำนวนวัน · Whole days only`);
     });
     c.awards.forEach((a, k) => {
-      if (a.override && !d.items[k].award_reason.trim())
+      if (a.split && a.splitErr) missing.push(`รายการที่ ${k + 1}: แบ่งซื้อ — ${a.splitErr} · Split quantities must add up`);
+      if (a.split && !d.items[k].award_reason.trim()) missing.push(`รายการที่ ${k + 1}: แบ่งซื้อหลายเจ้า ระบุเหตุผลที่สั่งซื้อ · Reason for splitting`);
+      else if (a.override && !a.split && !d.items[k].award_reason.trim())
         missing.push(`รายการที่ ${k + 1}: ติ๊ก ✓ ${vendorName(a.pick)} ซึ่งไม่ใช่ราคาต่ำสุด ระบุเหตุผล · Give a reason for not buying the lowest price`);
     });
   }
@@ -328,8 +357,10 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
       qty: c.lines[i].q, unit: it.unit, unit_price: c.lines[i].up, discount: it.discount.replace(/[\s,]/g, ''), prev_price: c.lines[i].prev,
       prev_vendor: it.prev_vendor.trim(), prev_date: it.prev_date || null, brand: it.brand.trim(), report_no: it.report_no.trim(),
       // only a ✓ moved away from the cheapest vendor is stored; the server ticks the cheapest itself
-      award: c.awards[i]?.override ? c.awards[i].pick : null,
+      award: c.awards[i]?.override && !c.awards[i].split ? c.awards[i].pick : null,
       award_reason: c.awards[i]?.override ? it.award_reason.trim() : '',
+      // แบ่งซื้อ is sent as typed (also while incomplete, so a draft keeps it)
+      split: it.split && !d.no_comp ? it.split.map((q, v) => ({ v, qty: num(q) })).filter((x) => x.qty > 0) : null,
     }));
   const row = () => {
     const items = rowItems();
@@ -470,6 +501,20 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
       </label>
     );
   };
+  /** แบ่งซื้อ: quantity bought from vendor v for item k, with its share of the total */
+  const splitCell = (k: number, v: number, a: (typeof c.awards)[number]) => {
+    const part = a.split?.find((x) => x.v === v);
+    const ln = v === 0 ? c.lines[k] : c.comps[v - 1]?.lines[k];
+    const usable = !!ln && ln.up > 0 && !ln.discErr;
+    return (
+      <div className="split-in">
+        <input className="in r" inputMode="decimal" id={`sq${k}-${v}`} aria-label={`จำนวนที่ซื้อจาก ${vendorName(v)} รายการที่ ${k + 1}`}
+          placeholder="จำนวน" disabled={!usable && !part} value={d.items[k].split?.[v] ?? ''} onChange={(e) => setSplitQty(k, v, e.target.value)} />
+        <span className="pct">{part ? `${part.pct}%` : '—'}</span>
+        {part && <div className="note">= {fmt(part.line)}</div>}
+      </div>
+    );
+  };
   /** the two delivery boxes of vendor v: tick + place chosen from the settings list */
   const deliveryCell = (v: number) => {
     const list = fixDelivery(v === 0 ? d.delivery : d.comps[v - 1]?.delivery);
@@ -498,7 +543,8 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
   const previewRow: RequestRow = {
     id: id || 'draft', no, status: 'draft', preparer_id: d.preparer_id || me.id, created_by: me.id, subject_type: d.subject_type,
     items: rowItems().map((it, i) => ({ ...it, product_name: it.product_name || '[ชื่อสินค้า]', net_price: c.lines[i].net, line_total: c.lines[i].line, prev_diff_pct: c.lines[i].pct,
-      award: c.awards[i].pick, award_auto: c.awards[i].best, award_line: c.awards[i].line, award_reason: c.awards[i].override ? d.items[i].award_reason : '' })),
+      award: c.awards[i].pick, award_auto: c.awards[i].best, award_line: c.awards[i].line, award_reason: c.awards[i].override ? d.items[i].award_reason : '',
+      split: c.awards[i].split ? c.awards[i].split.map((x) => ({ v: x.v, qty: x.qty, line: x.line, pct: x.pct })) : null })),
     delivery: fixDelivery(d.delivery),
     credit_days: parseDays(d.credit_days).days, lead_days: parseDays(d.lead_days).days, warranty: d.warranty, report_no: d.report_no, report_date: d.report_date || null,
     sku: skuKey(d.items[0].sku), product_name: summaryName, qty: n === 1 ? c.lines[0].q : n, unit: n === 1 ? d.items[0].unit : 'รายการ',
@@ -803,16 +849,22 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
                     <Fragment key={k}>
                     <tr>
                       <td className="note">{k + 1}</td>
-                      <td><span className="mono" style={{ fontSize: 12 }}>{skuKey(it.sku) || '—'}</span><br />{nameOf(it) || <span className="note">—</span>}</td>
+                      <td>
+                        <span className="mono" style={{ fontSize: 12 }}>{skuKey(it.sku) || '—'}</span><br />{nameOf(it) || <span className="note">—</span>}
+                        <div style={{ marginTop: 6 }}>
+                          <button type="button" id={`sb${k}`} className={`btn sm${it.split ? ' on-split' : ''}`} aria-pressed={!!it.split} onClick={() => toggleSplit(k, !it.split)}
+                            title="สั่งซื้อรายการนี้จากหลายเจ้า แบ่งจำนวนกัน">{it.split ? '✕ ยกเลิกแบ่งซื้อ' : '⇆ แบ่งซื้อ'}</button>
+                        </div>
+                      </td>
                       <td className="num" style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>{it.qty} {it.unit}</td>
-                      <td className={`num sel${a.pick === 0 ? ' won' : ''}`} style={{ textAlign: 'right' }}>
+                      <td className={`num sel${(a.split ? a.split.some((x) => x.v === 0) : a.pick === 0) ? ' won' : ''}`} style={{ textAlign: 'right' }}>
                         {fmt(c.lines[k].up)}
                         {c.lines[k].hasDisc && <div className="note">ลด {normDisc(it.discount)} → {fmt(c.lines[k].net)}</div>}
                         <div className="note">= {fmt(c.lines[k].line)}</div>
-                        {tick(k, 0, a)}
+                        {it.split ? splitCell(k, 0, a) : tick(k, 0, a)}
                       </td>
                       {d.comps.map((x, ci) => (
-                        <td key={ci} className={a.pick === ci + 1 ? 'won' : undefined}>
+                        <td key={ci} className={(a.split ? a.split.some((x) => x.v === ci + 1) : a.pick === ci + 1) ? 'won' : undefined}>
                           <input className="in r" inputMode="decimal" id={`cp${ci}-${k}`} aria-label={`ราคาต่อหน่วย ${x.vendor || `คู่เทียบ ${ci + 1}`} รายการที่ ${k + 1}`} value={x.prices[k] ?? ''} placeholder="0.00"
                             onChange={(e) => setPrice(ci, k, e.target.value)}
                             onBlur={() => { const v = num(x.prices[k]); if (v > 0) setPrice(ci, k, fmt(v)); }}
@@ -824,11 +876,28 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
                           <div className="note num" style={{ textAlign: 'right', color: c.comps[ci]?.lines[k]?.discErr ? 'var(--bad)' : undefined }}>
                             {c.comps[ci]?.lines[k]?.discErr || <>{c.comps[ci]?.lines[k]?.hasDisc && <>สุทธิ {fmt(c.comps[ci]?.lines[k]?.net)} · </>}= {fmt(c.comps[ci]?.lines[k]?.line)}</>}
                           </div>
-                          {tick(k, ci + 1, a)}
+                          {it.split ? splitCell(k, ci + 1, a) : tick(k, ci + 1, a)}
                         </td>
                       ))}
                     </tr>
-                    {a.override && (
+                    {a.split && (
+                      <tr className="why split">
+                        <td />
+                        <td colSpan={3 + d.comps.length}>
+                          <div className="split-sum" role="status">
+                            แบ่งซื้อรายการที่ {k + 1}: {a.split.map((x) => `${vendorName(x.v)} ${x.qty.toLocaleString('en-US')} ${it.unit} (${x.pct}%)`).join(' + ') || 'กรอกจำนวนในช่องของแต่ละเจ้า'}
+                            {' · '}รวม <b>{a.sum.toLocaleString('en-US')}</b> / {c.lines[k].q.toLocaleString('en-US')} {it.unit}
+                            {a.splitErr ? <span style={{ color: 'var(--bad)', fontWeight: 600 }}> · {a.splitErr}</span> : <span style={{ color: 'var(--sage-ink)', fontWeight: 600 }}> · ครบ 100% ✓ = {fmt(a.line)} บาท</span>}
+                          </div>
+                          <label className="f" htmlFor={`ar${k}`} style={{ color: 'var(--bad)' }}>
+                            เหตุผลที่สั่งซื้อแบบแบ่งปริมาณ · Reason for splitting <span className="req">*</span>
+                            <input className="in" id={`ar${k}`} value={it.award_reason} maxLength={500} placeholder="เช่น ราคาใกล้เคียงกัน กระจายความเสี่ยงการส่งของ / เจ้าเดียวส่งไม่พอ"
+                              onChange={(e) => setItem(k, { award_reason: e.target.value })} />
+                          </label>
+                        </td>
+                      </tr>
+                    )}
+                    {a.override && !a.split && (
                       <tr className="why">
                         <td />
                         <td colSpan={3 + d.comps.length}>
@@ -859,7 +928,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
                     <td colSpan={3}><b>สั่งซื้อตาม ✓ (ก่อน VAT)</b> · Ticked lines</td>
                     {c.byVendor.map((v, i) => (
                       <td key={i} className={`num${i === 0 ? ' sel' : ''}`} style={{ textAlign: 'right', fontWeight: 600, color: v > 0 ? 'var(--sage-ink)' : 'var(--muted)' }}>
-                        {v > 0 ? <>✓ {fmt(v)}<div className="note">{c.awards.filter((a) => a.pick === i).length} รายการ</div></> : '—'}
+                        {v > 0 ? <>✓ {fmt(v)}<div className="note">{c.countFor(i)} รายการ</div></> : '—'}
                       </td>
                     ))}
                   </tr>
