@@ -79,6 +79,7 @@ Every state change goes through database functions, so amounts, approvers and si
    ต่อด้วย [`supabase/migrations/0009_units.sql`](supabase/migrations/0009_units.sql) กด **Run** (หน่วยสินค้าที่ผู้ดูแลเพิ่ม/ปิดได้ที่ ตั้งค่าระบบ → หน่วยสินค้า)
    ต่อด้วย [`supabase/migrations/0010_split_delete_company_reset.sql`](supabase/migrations/0010_split_delete_company_reset.sql) กด **Run** (แบ่งซื้อต่อรายการ · ผู้จัดทำลบคำขอที่ยังไม่อนุมัติ · ผู้อนุมัติตามบริษัท · ผู้ดูแลล้างคำขอทั้งหมดก่อน Go-Live) — **รันก่อนเปิดเว็บเวอร์ชันนี้**
    ต่อด้วย [`supabase/migrations/0011_multi_vendor.sql`](supabase/migrations/0011_multi_vendor.sql) กด **Run** (ซื้อหลายเจ้า แยกราย SKU — แต่ละเจ้าเสนอราคาไม่ครบทุกรายการได้ · ชื่อผู้ขายที่ซื้อจริงในรายการคำขอ) — **รันก่อนเปิดเว็บเวอร์ชันนี้**
+   ต่อด้วย [`supabase/migrations/0012_report_no_required.sql`](supabase/migrations/0012_report_no_required.sql) กด **Run** (รายงานเลขที่บังคับกรอก และใช้เป็นเลขที่คำขอ ห้ามซ้ำ)
    > ระบบที่ใช้งานอยู่แล้ว: รันเฉพาะไฟล์ที่ยังไม่เคยรัน ตามลำดับเลข ข้อมูลเดิมถูกแปลงให้อัตโนมัติ และรันซ้ำได้โดยไม่เสียหาย
 4. ไปที่ **Project Settings → API** (หรือ **Data API / API Keys**) จดค่า:
    - **Project URL** → ใช้เป็น `NEXT_PUBLIC_SUPABASE_URL`
@@ -202,6 +203,7 @@ psql -d qa_test -v ON_ERROR_STOP=1 -f supabase/tests/70_award_delivery_test.sql 
 psql -d qa_test -v ON_ERROR_STOP=1 -f supabase/tests/80_units_test.sql        # runs 0009 itself; ends with: ALL 0009 TESTS PASSED
 psql -d qa_test -v ON_ERROR_STOP=1 -f supabase/tests/90_split_delete_company_reset_test.sql # runs last (clears requests); ends with: ALL 0010 TESTS PASSED
 psql -d qa_test -v ON_ERROR_STOP=1 -f supabase/tests/91_multi_vendor_test.sql  # ends with: ALL 0011 TESTS PASSED
+psql -d qa_test -v ON_ERROR_STOP=1 -f supabase/tests/92_report_no_required_test.sql # runs 0012 itself; ends with: ALL 0012 TESTS PASSED
 ```
 ครอบคลุม · Covers: first admin, applications, self-promotion blocked, server-side amounts and tiers, approver resolution by department, signatures required, forward rules, reject → reopen → resend (keeps number), admin remind/reassign/cancel, letter path rules, visibility for outsiders, disabled accounts.
 
