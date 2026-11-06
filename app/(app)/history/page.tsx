@@ -27,7 +27,7 @@ export default function History() {
     if (from) x = x.gte('created_at', from);
     if (to) x = x.lte('created_at', to + 'T23:59:59');
     const term = q.trim().replace(/[%,()]/g, '');
-    if (term) x = x.or(`no.ilike.%${term}%,product_name.ilike.%${term}%,sku.ilike.%${term}%,vendor.ilike.%${term}%`);
+    if (term) x = x.or(`no.ilike.%${term}%,product_name.ilike.%${term}%,sku.ilike.%${term}%,vendor.ilike.%${term}%,bought_vendors.ilike.%${term}%`);
     return x as Q;
   }
 

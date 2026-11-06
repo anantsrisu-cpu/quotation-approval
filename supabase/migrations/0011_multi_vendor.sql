@@ -4,6 +4,7 @@
 --     (price 0 = did not quote). Every item still needs at least one quote; the ✓
 --     defaults to the cheapest vendor that quoted it, and can only go to a vendor
 --     that quoted it. Comparison differences are not computed in this mode.
+--   requests.bought_vendors : the vendors bought from, shown in lists and searchable.
 --
 -- Run once in Supabase → SQL Editor after 0010. Safe to run again, and safe
 -- before the new app version is deployed.
@@ -12,6 +13,15 @@
 alter table public.requests add column if not exists multi_vendor boolean not null default false;
 grant update (multi_vendor) on public.requests to authenticated;
 grant insert (multi_vendor) on public.requests to authenticated;
+-- names of the vendors actually bought from (set when the request is sent), e.g. "เจ้า B + เจ้า C"
+alter table public.requests add column if not exists bought_vendors text not null default '';
+-- requests sent before this: from their ✓ / split (older ones without ✓ = เจ้าที่ 1)
+update public.requests r set bought_vendors = coalesce((
+    select string_agg(case when v = 0 then btrim(r.vendor) else r.comparisons->(v - 1)->>'vendor' end, ' + ' order by v)
+      from (select distinct coalesce((p->>'v')::int, (x->>'award')::int, 0) v
+              from jsonb_array_elements(r.items) x
+              left join lateral jsonb_array_elements(case when jsonb_typeof(x->'split') = 'array' then x->'split' else '[]'::jsonb end) p on true) u), '')
+  where r.status <> 'draft' and r.bought_vendors = '';
 
 create or replace function public.submit_request(p_id uuid, p_message text default '')
 returns jsonb language plpgsql security definer set search_path = public as $$
@@ -28,7 +38,7 @@ declare
   v_qty numeric; v_up numeric; v_prev numeric; v_line numeric; v_net numeric; v_disc text;
   v_sub numeric := 0; v_vat numeric; v_total numeric;
   nc int; ci int; best int; best_line numeric; pick int; aw_line numeric; aw_sub numeric := 0; c_line numeric; why text;
-  quoted boolean;
+  quoted boolean; bought_v int[] := '{}'; v_bought text;
   sp jsonb; sp_out jsonb; part jsonb; sv int; sq numeric; s_net numeric; s_line numeric; s_sum numeric; s_max numeric; seen int[];
   comps jsonb := '[]'::jsonb;
   c jsonb; prices jsonb; lines jsonb; discs jsonb; nets jsonb; c_disc text; c_net numeric;
@@ -260,6 +270,12 @@ begin
       aw_line := case when pick = 0 then (out_items->k->>'line_total')::numeric else (comps->(pick - 1)->'lines'->>k)::numeric end;
     end if;
     aw_sub := aw_sub + aw_line;
+    -- vendors bought from (✓ or a split part), for lists and search
+    if sp_out is not null then
+      bought_v := bought_v || array(select (x->>'v')::int from jsonb_array_elements(sp_out) x);
+    else
+      bought_v := bought_v || pick;
+    end if;
     out_items := jsonb_set(out_items, array[k::text], (out_items->k) || jsonb_build_object(
       'award', pick, 'award_auto', best, 'award_line', aw_line, 'split', sp_out,
       'award_reason', case when sp_out is not null or pick <> best then why else '' end));
@@ -321,6 +337,9 @@ begin
     subtotal = v_sub, vat = v_vat, total = v_total, vat_rate = s.vat_rate,
     comparisons = case when r.no_comp then '[]'::jsonb else comps end,
     low_reason = '', delivery = public.clean_delivery(r.delivery),
+    bought_vendors = coalesce((
+      select string_agg(case when v = 0 then btrim(r.vendor) else comps->(v - 1)->>'vendor' end, ' + ' order by v)
+        from (select distinct unnest(bought_v) v) u), ''),
     no_comp_reason = case when r.no_comp then r.no_comp_reason else '' end,
     tier_label = t.label, current_step = 0, message = coalesce(p_message, ''),
     preparer_signature = sig, submitted_at = now(), step_since = now(), updated_at = now(),

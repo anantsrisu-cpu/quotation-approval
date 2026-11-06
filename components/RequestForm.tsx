@@ -629,7 +629,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
               {Object.keys(PURP).map((k) => <option key={k} value={k}>{PURP[k]}</option>)}
             </select>
           </label>
-          <label className="f" htmlFor="f-vendor">ชื่อผู้ขาย เจ้าที่ 1 (ใบเสนอราคาหลัก) · Main vendor <span className="req">*</span>
+          <label className="f" htmlFor="f-vendor">{d.multi_vendor ? 'ชื่อผู้ขาย เจ้าที่ 1 · Vendor 1' : 'ชื่อผู้ขาย เจ้าที่ 1 (ใบเสนอราคาหลัก) · Main vendor'} <span className="req">*</span>
             <input className="in" id="f-vendor" value={d.vendor} onChange={(e) => set('vendor', e.target.value)} />
             <span className="check" style={{ fontWeight: 400, fontSize: 14, minHeight: 0 }}>
               <input type="checkbox" id="f-multi" checked={d.multi_vendor} onChange={(e) => setMulti(e.target.checked)} />ซื้อหลายเจ้า แยกราย SKU
@@ -805,9 +805,10 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
         </div>
         <div className="box num" style={{ borderStyle: 'solid', borderColor: 'var(--beige)' }}>
           {n} รายการ = <b>{fmt(c.sub)}</b> + VAT {fmt(c.vat)} = <b>{fmt(c.total)} บาท</b>
-          {c.byVendor.filter((v) => v > 0).length > 1 && (
-            <div className="note" style={{ marginTop: 4 }}>
-              แยกซื้อ · split: {c.byVendor.map((v, i) => (v > 0 ? `${vendorName(i)} ${fmt(v)}` : '')).filter(Boolean).join(' · ')}
+          {!d.no_comp && d.comps.length > 0 && (c.byVendor.filter((v) => v > 0).length > 1 || !(c.byVendor[0] > 0)) && (
+            <div className="note" style={{ marginTop: 4 }} id="f-bought">
+              สั่งซื้อจาก · Buying from: {c.byVendor.map((v, i) => (v > 0 ? `${vendorName(i)} ${fmt(v)}` : '')).filter(Boolean).join(' · ')}
+              {!(c.byVendor[0] > 0) && <> · <b>ไม่ได้ซื้อจากเจ้าที่ 1</b></>}
             </div>
           )}
         </div>
@@ -865,7 +866,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
                     <th style={{ width: 36 }}>#</th>
                     <th>สินค้า · Item</th>
                     <th style={{ textAlign: 'right' }}>จำนวน</th>
-                    <th className="sel" style={{ textAlign: 'right' }}>เจ้าที่ 1 · ผู้ขายหลัก<br /><span style={{ fontWeight: 600, color: 'var(--ink)' }}>{d.vendor || '—'}</span></th>
+                    <th className="sel" style={{ textAlign: 'right' }}>{d.multi_vendor ? 'เจ้าที่ 1' : 'เจ้าที่ 1 · ผู้ขายหลัก'}<br /><span style={{ fontWeight: 600, color: 'var(--ink)' }}>{d.vendor || '—'}</span></th>
                     {d.comps.map((x, ci) => (
                       <th key={ci}>
                         <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>

@@ -146,6 +146,8 @@ export interface RequestRow {
   no_comp: boolean;
   /** ซื้อหลายเจ้า แยกราย SKU (0011) */
   multi_vendor?: boolean;
+  /** vendors actually bought from, set when sent (0011), e.g. "เจ้า B + เจ้า C" */
+  bought_vendors?: string;
   no_comp_reason: string;
   low_reason: string;
   message: string;

@@ -235,7 +235,7 @@ export default function RequestDetail() {
                 ['จำนวนรายการ · Items', `${itemsOf(r).length} รายการ`],
                 ['ฝ่ายที่ขอซื้อ · Department', deptTh(r.dept)],
                 ['ซื้อเพื่อ · Purpose', PURP[r.purpose]],
-                ['ผู้ขาย · Vendor', r.vendor],
+                ['ผู้ขาย · Vendor', r.bought_vendors && r.bought_vendors !== r.vendor ? `สั่งซื้อจาก ${r.bought_vendors} (เจ้าที่ 1: ${r.vendor})` : r.vendor],
                 ['เครดิต / Lead time', `${daysText(r.credit_days)} / ${daysText(r.lead_days)}`],
                 ['การรับประกัน · Warranty', r.warranty || '—'],
                 ['รายงานเลขที่ / วันที่อนุมัติ (หัวตาราง)', `${r.report_no || r.no || '—'} / ${r.report_date ? dOnly(r.report_date) : 'วันที่อนุมัติครบ'}`],

@@ -30,6 +30,17 @@ select t_check('unquoted lines stored as 0, vendor subtotals of what they quoted
       and comparisons->0->'diff' = 'null'::jsonb
      from requests where id='ffffffff-0000-0000-0000-000000000001'));
 
+select t_check('bought_vendors lists who is bought from', (select bought_vendors = 'เจ้า A + เจ้า B' from requests where id='ffffffff-0000-0000-0000-000000000001'));
+
+-- เจ้าที่ 1 quotes everything but loses every item: bought from B and C only
+insert into requests (id, dept, buyer_id, company_id, vendor, multi_vendor, items, comparisons)
+values ('ffffffff-0000-0000-0000-000000000003','purchasing','00000000-0000-0000-0000-000000000003','main','เจ้า A', true,
+  '[{"sku":"P-001","qty":1,"unit_price":100},{"sku":"P-002","qty":1,"unit_price":100}]',
+  '[{"vendor":"เจ้า B","prices":[80,""]},{"vendor":"เจ้า C","prices":["",90]}]');
+insert into request_files (request_id, path, name) values ('ffffffff-0000-0000-0000-000000000003','ffffffff-0000-0000-0000-000000000003/q.pdf','q.pdf');
+select submit_request('ffffffff-0000-0000-0000-000000000003')::text;
+select t_check('main vendor not bought from: B + C, 170', (select bought_vendors = 'เจ้า B + เจ้า C' and subtotal = 170 from requests where id='ffffffff-0000-0000-0000-000000000003'));
+
 -- an item nobody quoted
 insert into requests (id, dept, buyer_id, company_id, vendor, multi_vendor, items, comparisons)
 values ('ffffffff-0000-0000-0000-000000000002','purchasing','00000000-0000-0000-0000-000000000003','main','เจ้า A', true,
