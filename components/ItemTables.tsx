@@ -151,8 +151,8 @@ export function CompareTable({ r }: { r: RequestRow }) {
     const part = partOf(k, v);
     return (
       <>
-        {disc ? <><span className="note">{fmt(price)} ลด {disc}</span><br /><b>{fmt(net)}</b></> : fmt(price)}
-        <div className="note">= {fmt(line)}</div>
+        {!(price > 0) ? <span className="note">ไม่ได้เสนอ</span> : disc ? <><span className="note">{fmt(price)} ลด {disc}</span><br /><b>{fmt(net)}</b></> : fmt(price)}
+        {price > 0 && <div className="note">= {fmt(line)}</div>}
         {won && <div style={{ color: 'var(--sage-ink)', fontWeight: 700 }}>{part ? `✓ แบ่งซื้อ ${part.qty.toLocaleString('en-US')} (${part.pct}%)` : '✓ สั่งซื้อ'}</div>}
       </>
     );

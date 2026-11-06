@@ -3,13 +3,15 @@ import { useEffect, useState } from 'react';
 import { useApp } from '@/components/AppProvider';
 import { LIST_COLS, Loading, PageHead, ReqTable } from '@/components/ui';
 import { ST } from '@/lib/format';
+import { exportHistory } from '@/lib/exportHistory';
 import type { RequestRow } from '@/lib/types';
 
 const PAGE = 50;
 
 /** Everything the signed-in person is allowed to see (database rules decide). */
 export default function History() {
-  const { sb, bump } = useApp();
+  const { sb, bump, name, deptTh, posTh, company, toast } = useApp();
+  const [busy, setBusy] = useState(false);
   const [q, setQ] = useState('');
   const [st, setSt] = useState('all');
   const [from, setFrom] = useState('');
@@ -18,24 +20,58 @@ export default function History() {
   const [rows, setRows] = useState<RequestRow[] | null>(null);
   const [total, setTotal] = useState(0);
 
+  /** the same search and filters on any select */
+  function filtered<Q>(query: Q): Q {
+    let x = query as any;
+    if (st !== 'all') x = x.eq('status', st);
+    if (from) x = x.gte('created_at', from);
+    if (to) x = x.lte('created_at', to + 'T23:59:59');
+    const term = q.trim().replace(/[%,()]/g, '');
+    if (term) x = x.or(`no.ilike.%${term}%,product_name.ilike.%${term}%,sku.ilike.%${term}%,vendor.ilike.%${term}%`);
+    return x as Q;
+  }
+
+  /** every matching request (not only this page) to Excel: one sheet of requests, one of items */
+  async function toExcel() {
+    setBusy(true);
+    try {
+      const all: RequestRow[] = [];
+      for (let i = 0; i < 20; i++) {
+        const { data, error } = await filtered(
+          sb.from('requests').select('*, request_steps(step_no,position,approver_id,status,signer_id)').order('created_at', { ascending: false }),
+        ).range(i * 1000, i * 1000 + 999);
+        if (error) throw error;
+        all.push(...((data as unknown as RequestRow[]) || []));
+        if (!data || data.length < 1000) break;
+      }
+      if (!all.length) { toast('info', 'ไม่มีคำขอให้ดึงรายงาน · Nothing to export', ''); return; }
+      const stamp = new Date().toISOString().slice(0, 10);
+      await exportHistory(all, { name, deptTh, posTh, companyTh: (id) => company(id)?.th || id || '' }, `quotation-report-${stamp}.xlsx`);
+      toast('ok', 'ดึงรายงาน Excel แล้ว · Exported', `${all.length} คำขอ`);
+    } catch (e: any) {
+      toast('bad', 'ดึงรายงานไม่สำเร็จ · Export failed', e?.message || '');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   useEffect(() => {
     const t = setTimeout(async () => {
-      let query = sb.from('requests').select(LIST_COLS, { count: 'exact' }).order('created_at', { ascending: false }).range(page * PAGE, page * PAGE + PAGE - 1);
-      if (st !== 'all') query = query.eq('status', st);
-      if (from) query = query.gte('created_at', from);
-      if (to) query = query.lte('created_at', to + 'T23:59:59');
-      const term = q.trim().replace(/[%,()]/g, '');
-      if (term) query = query.or(`no.ilike.%${term}%,product_name.ilike.%${term}%,sku.ilike.%${term}%,vendor.ilike.%${term}%`);
+      const query = filtered(sb.from('requests').select(LIST_COLS, { count: 'exact' }).order('created_at', { ascending: false })).range(page * PAGE, page * PAGE + PAGE - 1);
       const { data, count } = await query;
       setRows((data as unknown as RequestRow[]) || []);
       setTotal(count || 0);
     }, 250);
     return () => clearTimeout(t);
-  }, [sb, q, st, from, to, page, bump]);
+  }, [sb, q, st, from, to, page, bump]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <>
-      <PageHead title="ประวัติและค้นหา" lead="History & search — open any request to see everything that happened" />
+      <PageHead title="ประวัติและค้นหา" lead="History & search — open any request to see everything that happened">
+        <button className="btn" id="h-export" onClick={toExcel} disabled={busy || !total} title="ดึงทุกคำขอที่ตรงกับการค้นหาและตัวกรอง ไม่ใช่แค่หน้านี้">
+          {busy ? 'กำลังสร้างไฟล์…' : `ดึงรายงาน Excel (${total} คำขอ) · Export`}
+        </button>
+      </PageHead>
       <div className="card">
         <div className="grid">
           <label className="f span2" htmlFor="h-q">ค้นหา · Search

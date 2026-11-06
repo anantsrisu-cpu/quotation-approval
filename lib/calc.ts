@@ -76,8 +76,10 @@ export function parseDays(v: string): { days: number | null; error: string | nul
  * (0 = เจ้าที่ 1, 1 = first comparison …); another vendor needs a reason.
  * sub / vat / total = the ticked lines = the amount to approve.
  * q1Sub / q1Total = เจ้าที่ 1's whole quotation (what the comparison differences refer to).
+ * multi (ซื้อหลายเจ้า แยกราย SKU): a vendor may leave items unpriced (= did not quote them);
+ * the ✓ goes to the cheapest vendor that quoted the item, best = -1 when nobody did.
  */
-export function calcItems(items: DraftItem[], vatRate: number, comps: DraftComp[], noComp = false) {
+export function calcItems(items: DraftItem[], vatRate: number, comps: DraftComp[], noComp = false, multi = false) {
   const lines = items.map((it) => {
     const up = num(it.unit_price);
     const q = num(it.qty);
@@ -95,8 +97,9 @@ export function calcItems(items: DraftItem[], vatRate: number, comps: DraftComp[
     });
     const csub = r2(cl.reduce((s, x) => s + x.line, 0));
     const ctot = r2(csub + r2(csub * vatRate));
-    const complete = cl.length > 0 && cl.every((x) => x.up > 0 && !x.discErr);
-    return { vendor: c.vendor, lines: cl, sub: csub, total: ctot, diff: r2(ctot - q1Total), complete };
+    const complete = cl.length > 0 && (multi ? cl.some((x) => x.up > 0) && cl.every((x) => !x.discErr) : cl.every((x) => x.up > 0 && !x.discErr));
+    const quoted = cl.filter((x) => x.up > 0).length;
+    return { vendor: c.vendor, lines: cl, sub: csub, total: ctot, diff: multi ? null : r2(ctot - q1Total), complete, quoted };
   });
   const netAt = (v: number, k: number) => (v === 0 ? lines[k].net : cs[v - 1]?.lines[k]?.net ?? 0);
   const usable = (v: number, k: number) => {
@@ -105,8 +108,8 @@ export function calcItems(items: DraftItem[], vatRate: number, comps: DraftComp[
   };
   // ✓ per item: the cheapest priced line, unless another vendor was ticked or the quantity is split
   const awards = lines.map((l, k) => {
-    let best = 0;
-    let bestLine = l.line;
+    let best = l.up > 0 && !l.discErr ? 0 : -1;
+    let bestLine = best === 0 ? l.line : Infinity;
     cs.forEach((c, i) => {
       const x = c.lines[k];
       if (x && x.up > 0 && !x.discErr && x.line < bestLine) {
@@ -128,8 +131,8 @@ export function calcItems(items: DraftItem[], vatRate: number, comps: DraftComp[
       return { best, pick, line: r2(parts.reduce((s, x) => s + x.line, 0)), override: true, split: parts, sum, splitErr: err };
     }
     const want = items[k].award;
-    const pick = want != null && want >= 0 && want <= cs.length ? want : best;
-    const line = pick === 0 ? l.line : cs[pick - 1].lines[k].line;
+    const pick = want != null && want >= 0 && want <= cs.length && usable(want, k) ? want : best;
+    const line = pick < 0 ? 0 : pick === 0 ? l.line : cs[pick - 1].lines[k].line;
     return { best, pick, line, override: pick !== best, split: null as null | { v: number; qty: number; line: number; pct: number; ok: boolean }[], sum: l.q, splitErr: null as string | null };
   });
   const sub = r2(awards.reduce((s, a) => s + a.line, 0));
@@ -140,7 +143,8 @@ export function calcItems(items: DraftItem[], vatRate: number, comps: DraftComp[
     r2(awards.reduce((s, a) => s + (a.split ? a.split.filter((x) => x.v === v).reduce((t, x) => t + x.line, 0) : a.pick === v ? a.line : 0), 0)));
   /** items bought (wholly or partly) from vendor v */
   const countFor = (v: number) => awards.filter((a) => (a.split ? a.split.some((x) => x.v === v) : a.pick === v)).length;
-  return { lines, sub, vat, total, q1Sub, q1Total, comps: cs, awards, byVendor, countFor };
+  const q1Quoted = lines.filter((l) => l.up > 0).length;
+  return { lines, sub, vat, total, q1Sub, q1Total, q1Quoted, comps: cs, awards, byVendor, countFor };
 }
 
 /** Line items of a request (older single-item requests are shown as one line). */

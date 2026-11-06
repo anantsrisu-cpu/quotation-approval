@@ -244,3 +244,7 @@ table.cmp tr.why.split td{background:var(--sage-bg)}
 .imp-pv{border:1px solid var(--beige);background:var(--soft);border-radius:10px;padding:12px 14px;font-size:14px}
 .card.danger-zone{border:2px solid var(--bad-solid)}
 .card.danger-zone h2{color:var(--bad)}
+/* ซื้อหลายเจ้า แยกราย SKU */
+.multi-box{display:flex;flex-direction:column;gap:8px;border:1px solid var(--sage-ink);background:var(--sage-bg);border-radius:12px;padding:12px 14px}
+.multi-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
+.multi-list .in{min-width:0;flex:1}

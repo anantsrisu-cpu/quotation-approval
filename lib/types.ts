@@ -92,7 +92,7 @@ export interface Comparison {
   unit_price?: number;
   subtotal?: number;
   total?: number;
-  diff?: number;
+  diff?: number | null;
 }
 
 export interface RequestStep {
@@ -144,6 +144,8 @@ export interface RequestRow {
   sign_plan?: SignPlanEntry[] | null;
   comparisons: Comparison[];
   no_comp: boolean;
+  /** ซื้อหลายเจ้า แยกราย SKU (0011) */
+  multi_vendor?: boolean;
   no_comp_reason: string;
   low_reason: string;
   message: string;

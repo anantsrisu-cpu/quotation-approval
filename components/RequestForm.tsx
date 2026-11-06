@@ -33,6 +33,8 @@ interface Draft {
   details: string;
   comps: DraftComp[];
   no_comp: boolean;
+  /** ซื้อหลายเจ้า แยกราย SKU: vendors may quote only some items */
+  multi_vendor: boolean;
   no_comp_reason: string;
   low_reason: string;
 }
@@ -106,7 +108,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
       company_id: companies.find((c) => c.active)?.id || '', vendor: '', quote_no: '', quote_date: today(),
       credit_days: '', lead_days: '', warranty: '', report_no: '', report_date: '', delivery: blankDelivery(),
       details: '', comps: [{ ...blankComp(1), delivery: blankDelivery() }, { ...blankComp(1), delivery: blankDelivery() }],
-      no_comp: false, no_comp_reason: '', low_reason: '',
+      no_comp: false, no_comp_reason: '', low_reason: '', multi_vendor: false,
     }),
     [me?.id, me?.dept, departments, companies, has, forUser, people, blankDelivery],
   );
@@ -165,7 +167,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
         delivery: fixDelivery(r.delivery),
         credit_days: r.credit_days != null ? String(r.credit_days) : '', lead_days: r.lead_days != null ? String(r.lead_days) : '', warranty: r.warranty || '',
         report_no: copyFrom ? '' : r.report_no || '', report_date: copyFrom ? '' : r.report_date || '',
-        no_comp: r.no_comp, no_comp_reason: r.no_comp_reason, low_reason: r.low_reason,
+        no_comp: r.no_comp, no_comp_reason: r.no_comp_reason, low_reason: r.low_reason, multi_vendor: !!r.multi_vendor,
       });
       if (draftId) {
         setNo(r.no);
@@ -217,6 +219,9 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
     setD((x) => (x && x.items.length > 1 ? { ...x, items: x.items.filter((_, j) => j !== i), comps: x.comps.map((c) => ({ ...c, prices: c.prices.filter((_, j) => j !== i), discounts: c.discounts.filter((_, j) => j !== i) })) } : x));
   const setPrice = (ci: number, k: number, v: string, field: 'prices' | 'discounts' = 'prices') =>
     setD((x) => (x ? { ...x, comps: x.comps.map((c, j) => (j === ci ? { ...c, [field]: c[field].map((p, m) => (m === k ? v : p)) } : c)) } : x));
+  /** ซื้อหลายเจ้า on: needs vendors to compare, so "no comparison" is switched off and one vendor added */
+  const setMulti = (on: boolean) =>
+    setD((x) => (x ? { ...x, multi_vendor: on, ...(on ? { no_comp: false, comps: x.comps.length ? x.comps : [{ ...blankComp(x.items.length), delivery: blankDelivery() }] } : {}) } : x));
   /** แบ่งซื้อ on/off for item k */
   const toggleSplit = (k: number, on: boolean) =>
     setD((x) => (x ? { ...x, items: x.items.map((it, j) => (j === k ? { ...it, split: on ? Array(x.comps.length + 1).fill('') : null, award: null } : it)) } : x));
@@ -287,7 +292,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
     return () => clearTimeout(t);
   }, [activeSku, sb]);
 
-  const c = useMemo(() => calcItems(d?.items || [], vatRate, d?.comps || [], !!d?.no_comp), [d?.items, d?.comps, vatRate, d?.no_comp]);
+  const c = useMemo(() => calcItems(d?.items || [], vatRate, d?.comps || [], !!d?.no_comp, !!d?.multi_vendor), [d?.items, d?.comps, vatRate, d?.no_comp, d?.multi_vendor]);
 
   // who must approve this amount (same rule the server uses)
   useEffect(() => {
@@ -321,7 +326,8 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
     if (!it.sku.trim()) missing.push(`${L}: กรอกรหัสสินค้า SKU · Enter a SKU`);
     else if (prodOf(it) === null) missing.push(`${L}: ไม่พบ SKU ${skuKey(it.sku)} · SKU not found`);
     if (!(c.lines[i]?.q > 0)) missing.push(`${L}: กรอกจำนวน · Enter the quantity`);
-    if (!(c.lines[i]?.up > 0)) missing.push(`${L}: กรอกราคาต่อหน่วย · Enter the unit price`);
+    if (!d.multi_vendor && !(c.lines[i]?.up > 0)) missing.push(`${L}: กรอกราคาต่อหน่วย · Enter the unit price`);
+    if (d.multi_vendor && !d.no_comp && c.awards[i]?.best < 0) missing.push(`${L}: ยังไม่มีผู้ขายเสนอราคา กรอกราคาอย่างน้อย 1 เจ้า · No vendor quoted this item`);
     if (c.lines[i]?.discErr) missing.push(`${L}: ${c.lines[i].discErr} · Check the discount`);
   });
   if (!d.dept) missing.push('เลือกฝ่ายที่ขอซื้อ · Choose the department');
@@ -330,13 +336,17 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
   if (parseDays(d.lead_days).error) missing.push('Lead time: ใส่จำนวนวันเป็นตัวเลข · Lead time must be whole days');
   if (!d.buyer_id) missing.push('เลือกผู้ซื้อ · Choose the buyer');
   if (!d.company_id) missing.push('เลือกบริษัทผู้ซื้อ · Choose the buyer company');
+  if (d.multi_vendor && (d.no_comp || !d.comps.length)) missing.push('ซื้อหลายเจ้า: เพิ่มผู้ขายอย่างน้อย 2 เจ้า · Add a second vendor');
   if (d.no_comp) {
     if (!d.no_comp_reason.trim()) missing.push('ระบุเหตุผลที่ไม่มีคู่เทียบ · Give a reason for no comparison');
   } else {
     if (!d.comps.length) missing.push('เพิ่มคู่เทียบอย่างน้อย 1 ราย หรือติ๊ก "ไม่มีคู่เทียบ" · Add a comparison or tick "No comparison"');
     d.comps.forEach((x, i) => {
       if (!x.vendor.trim()) missing.push(`คู่เทียบ ${i + 1}: กรอกชื่อผู้ขาย · Enter the vendor name`);
-      if (!c.comps[i]?.complete) missing.push(`คู่เทียบ ${i + 1}: กรอกราคาต่อหน่วยให้ครบทุกรายการ และตรวจส่วนลด · Enter a price for every item and check discounts`);
+      if (!c.comps[i]?.complete)
+        missing.push(d.multi_vendor
+          ? `เจ้าที่ ${i + 2}: กรอกราคาอย่างน้อย 1 รายการ และตรวจส่วนลด · Enter at least one price`
+          : `คู่เทียบ ${i + 1}: กรอกราคาต่อหน่วยให้ครบทุกรายการ และตรวจส่วนลด · Enter a price for every item and check discounts`);
       if (parseDays(x.credit_days).error || parseDays(x.lead_days).error) missing.push(`คู่เทียบ ${i + 1}: เครดิต / Lead time ต้องเป็นจำนวนวัน · Whole days only`);
     });
     c.awards.forEach((a, k) => {
@@ -393,7 +403,8 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
         delivery: fixDelivery(x.delivery),
       })),
       delivery: fixDelivery(d.delivery),
-      no_comp: d.no_comp,
+      no_comp: d.no_comp && !d.multi_vendor,
+      multi_vendor: d.multi_vendor,
       no_comp_reason: d.no_comp ? d.no_comp_reason : '',
       low_reason: '',
       message,
@@ -557,7 +568,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
       credit_days: parseDays(d.comps[ci].credit_days).days, lead_days: parseDays(d.comps[ci].lead_days).days, warranty: d.comps[ci].warranty,
       delivery: fixDelivery(d.comps[ci].delivery),
     })),
-    no_comp: d.no_comp, no_comp_reason: d.no_comp_reason, low_reason: '', message,
+    no_comp: d.no_comp, no_comp_reason: d.no_comp_reason, low_reason: '', message, multi_vendor: d.multi_vendor,
     sign_plan: [...positions].sort((a, b) => a.sort - b.sort).map((p) => {
       const a = approvers.find((x) => x.pos === p.code);
       if (!a) return { position: p.code, mode: 'skip' as const };
@@ -620,6 +631,9 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
           </label>
           <label className="f" htmlFor="f-vendor">ชื่อผู้ขาย เจ้าที่ 1 (ใบเสนอราคาหลัก) · Main vendor <span className="req">*</span>
             <input className="in" id="f-vendor" value={d.vendor} onChange={(e) => set('vendor', e.target.value)} />
+            <span className="check" style={{ fontWeight: 400, fontSize: 14, minHeight: 0 }}>
+              <input type="checkbox" id="f-multi" checked={d.multi_vendor} onChange={(e) => setMulti(e.target.checked)} />ซื้อหลายเจ้า แยกราย SKU
+            </span>
           </label>
           <div className="grid" style={{ gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: 10 }}>
             <label className="f" htmlFor="f-credit">เครดิต (วัน) · Credit
@@ -663,6 +677,26 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
             <textarea className="in" id="f-details" value={d.details} onChange={(e) => set('details', e.target.value)} />
           </label>
         </div>
+        {d.multi_vendor && (
+          <div className="multi-box">
+            <div className="actions">
+              <b>ผู้ขายในคำขอนี้ · Vendors ({d.comps.length + 1} เจ้า)</b>
+              <button type="button" className="btn sm" id="mv-add" onClick={addComp}>+ เพิ่มผู้ขาย · Add vendor</button>
+            </div>
+            <span className="note">แต่ละเจ้ากรอกราคาเฉพาะรายการที่เสนอ (เว้นว่าง = ไม่ได้เสนอ) ในตารางผู้ขายด้านล่าง ระบบติ๊ก ✓ เจ้าที่ราคาต่ำสุดของแต่ละ SKU ให้ และเปลี่ยนเจ้าได้โดยระบุเหตุผล</span>
+            <div className="multi-list">
+              <label className="f" htmlFor="mv-0">เจ้าที่ 1<input className="in" id="mv-0" value={d.vendor} placeholder="ชื่อผู้ขาย" onChange={(e) => set('vendor', e.target.value)} /></label>
+              {d.comps.map((x, ci) => (
+                <label key={ci} className="f" htmlFor={`mv-${ci + 1}`}>เจ้าที่ {ci + 2}
+                  <span className="row" style={{ gap: 6, flexWrap: 'nowrap' }}>
+                    <input className="in" id={`mv-${ci + 1}`} value={x.vendor} placeholder="ชื่อผู้ขาย" onChange={(e) => setComp(ci, { vendor: e.target.value })} />
+                    <button type="button" className="icon-btn" aria-label={`ลบเจ้าที่ ${ci + 2}`} onClick={() => removeComp(ci)}>✕</button>
+                  </span>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="actions">
           <h2 style={{ margin: 0 }}>รายการสินค้า · Items <span className="chip st-draft">{n} รายการ</span></h2>
@@ -693,7 +727,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
                       <UnitField id={`unit${i}`} value={it.unit} onChange={(v) => setItem(i, { unit: v })} />
                     </label>
                     <label className="f" htmlFor={`up${i}`}>ราคา/หน่วย <span className="req">*</span>
-                      <input className="in r" inputMode="decimal" id={`up${i}`} value={it.unit_price} placeholder="0.00"
+                      <input className="in r" inputMode="decimal" id={`up${i}`} value={it.unit_price} placeholder={d.multi_vendor ? 'ไม่ได้เสนอ' : '0.00'}
                         onChange={(e) => setItem(i, { unit_price: e.target.value })} onBlur={() => L.up > 0 && setItem(i, { unit_price: fmt(L.up) })}
                         onPaste={(e) => pasteDown(e, (k, v) => setItem(k, { unit_price: v }), i)} />
                     </label>
@@ -803,7 +837,8 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
 
         <h2>คู่เทียบราคา · Price comparison <span className="req">*</span></h2>
         <label className="check" style={{ border: '1px solid var(--beige)', borderRadius: 10, padding: '10px 14px' }}>
-          <input type="checkbox" checked={d.no_comp} onChange={(e) => set('no_comp', e.target.checked)} />ไม่มีคู่เทียบ · No comparison quote
+          <input type="checkbox" checked={d.no_comp} disabled={d.multi_vendor} onChange={(e) => set('no_comp', e.target.checked)} />ไม่มีคู่เทียบ · No comparison quote
+          {d.multi_vendor && <span className="note">(ใช้ไม่ได้เมื่อซื้อหลายเจ้า)</span>}
         </label>
         {d.no_comp ? (
           <label className="f bad-box" htmlFor="f-ncr" style={{ color: 'var(--bad)' }}>
@@ -858,14 +893,14 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
                       </td>
                       <td className="num" style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>{it.qty} {it.unit}</td>
                       <td className={`num sel${(a.split ? a.split.some((x) => x.v === 0) : a.pick === 0) ? ' won' : ''}`} style={{ textAlign: 'right' }}>
-                        {fmt(c.lines[k].up)}
+                        {d.multi_vendor && !(c.lines[k].up > 0) ? <span className="note">ไม่ได้เสนอ</span> : fmt(c.lines[k].up)}
                         {c.lines[k].hasDisc && <div className="note">ลด {normDisc(it.discount)} → {fmt(c.lines[k].net)}</div>}
-                        <div className="note">= {fmt(c.lines[k].line)}</div>
+                        {c.lines[k].up > 0 && <div className="note">= {fmt(c.lines[k].line)}</div>}
                         {it.split ? splitCell(k, 0, a) : tick(k, 0, a)}
                       </td>
                       {d.comps.map((x, ci) => (
                         <td key={ci} className={(a.split ? a.split.some((x) => x.v === ci + 1) : a.pick === ci + 1) ? 'won' : undefined}>
-                          <input className="in r" inputMode="decimal" id={`cp${ci}-${k}`} aria-label={`ราคาต่อหน่วย ${x.vendor || `คู่เทียบ ${ci + 1}`} รายการที่ ${k + 1}`} value={x.prices[k] ?? ''} placeholder="0.00"
+                          <input className="in r" inputMode="decimal" id={`cp${ci}-${k}`} aria-label={`ราคาต่อหน่วย ${x.vendor || `คู่เทียบ ${ci + 1}`} รายการที่ ${k + 1}`} value={x.prices[k] ?? ''} placeholder={d.multi_vendor ? 'ไม่ได้เสนอ' : '0.00'}
                             onChange={(e) => setPrice(ci, k, e.target.value)}
                             onBlur={() => { const v = num(x.prices[k]); if (v > 0) setPrice(ci, k, fmt(v)); }}
                             onPaste={(e) => pasteDown(e, (m, v) => setPrice(ci, m, v), k)} />
@@ -874,7 +909,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
                             onChange={(e) => setPrice(ci, k, e.target.value, 'discounts')}
                             onPaste={(e) => pasteDown(e, (m, v) => setPrice(ci, m, v, 'discounts'), k)} />
                           <div className="note num" style={{ textAlign: 'right', color: c.comps[ci]?.lines[k]?.discErr ? 'var(--bad)' : undefined }}>
-                            {c.comps[ci]?.lines[k]?.discErr || <>{c.comps[ci]?.lines[k]?.hasDisc && <>สุทธิ {fmt(c.comps[ci]?.lines[k]?.net)} · </>}= {fmt(c.comps[ci]?.lines[k]?.line)}</>}
+                            {c.comps[ci]?.lines[k]?.discErr || (c.comps[ci]?.lines[k]?.up > 0 && <>{c.comps[ci]?.lines[k]?.hasDisc && <>สุทธิ {fmt(c.comps[ci]?.lines[k]?.net)} · </>}= {fmt(c.comps[ci]?.lines[k]?.line)}</>)}
                           </div>
                           {it.split ? splitCell(k, ci + 1, a) : tick(k, ci + 1, a)}
                         </td>
@@ -916,8 +951,8 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
                 <tfoot>
                   <tr>
                     <td colSpan={3}>มูลค่ารวม ก่อน VAT · Subtotal</td>
-                    <td className="num sel" style={{ textAlign: 'right' }}>{fmt(c.q1Sub)}</td>
-                    {c.comps.map((x, ci) => <td key={ci} className="num" style={{ textAlign: 'right' }}>{fmt(x.sub)}</td>)}
+                    <td className="num sel" style={{ textAlign: 'right' }}>{fmt(c.q1Sub)}{d.multi_vendor && <div className="note">เสนอ {c.q1Quoted}/{n} รายการ</div>}</td>
+                    {c.comps.map((x, ci) => <td key={ci} className="num" style={{ textAlign: 'right' }}>{fmt(x.sub)}{d.multi_vendor && <div className="note">เสนอ {x.quoted}/{n} รายการ</div>}</td>)}
                   </tr>
                   <tr>
                     <td colSpan={3}><b>รวม VAT · Total</b></td>
@@ -936,8 +971,8 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
                     <td colSpan={3}>ส่วนต่างจากเจ้าที่ 1 · Difference</td>
                     <td className="sel" style={{ textAlign: 'right' }}>—</td>
                     {c.comps.map((x, ci) => (
-                      <td key={ci} className="num" style={{ textAlign: 'right', fontWeight: 600, color: !x.complete ? 'var(--muted)' : x.diff >= 0 ? 'var(--sage-ink)' : 'var(--bad)' }}>
-                        {!x.complete ? 'กรอกให้ครบ' : x.diff >= 0 ? `สูงกว่า +${fmt(x.diff)}` : `ต่ำกว่า −${fmt(-x.diff)}`}
+                      <td key={ci} className="num" style={{ textAlign: 'right', fontWeight: 600, color: !x.complete || x.diff == null ? 'var(--muted)' : x.diff >= 0 ? 'var(--sage-ink)' : 'var(--bad)' }}>
+                        {x.diff == null ? 'ไม่เทียบ (เสนอไม่ครบ)' : !x.complete ? 'กรอกให้ครบ' : x.diff >= 0 ? `สูงกว่า +${fmt(x.diff)}` : `ต่ำกว่า −${fmt(-x.diff)}`}
                       </td>
                     ))}
                   </tr>

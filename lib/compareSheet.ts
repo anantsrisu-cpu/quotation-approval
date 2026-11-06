@@ -112,6 +112,7 @@ const CSS = `
 .cs-main tbody td{vertical-align:top}
 .cs-main .sel{background:#FBF6EF}
 .cs-main td.won{background:#EAF3E6;font-weight:600}
+.cs-main td.na{color:#888;font-size:.9em;text-align:center}
 .cs-main td.won .sub.sp{color:#1E6B2E;font-weight:600}
 .cs-main .tk{float:left;font-weight:700;color:#1E6B2E;font-size:1.15em;line-height:1}
 .cs-foot td.dl{font-size:.92em;background:#fff;white-space:normal;line-height:1.25}
@@ -216,6 +217,8 @@ ${d.vendors
     // Q'TY bought from this vendor: the split part, or the whole quantity where this vendor has the ✓
     const q = part ? part.qty : !it.split && won ? it.qty : null;
     const qcell = split3 ? `<td class="n${q != null ? ' won' : ''}">${q != null ? qtyFmt(q) : ''}</td>` : '';
+    // ซื้อหลายเจ้า: this vendor did not quote the item
+    if (!(v.unit[k] > 0)) return `${qcell}<td class="n na">ไม่ได้เสนอ</td><td class="n na">-</td>`;
     return `${qcell}<td class="n">${money(v.net[k])}${disc ? `<span class="sub">${money(v.unit[k])} ลด ${esc(disc)}</span>` : ''}</td><td class="n${won ? ' won' : ''}">${won ? '<span class="tk" aria-label="สั่งซื้อ">✓</span>' : ''}${money(v.line[k])}${share}</td>`;
   })
   .join('')}</tr>`;
