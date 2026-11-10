@@ -81,6 +81,7 @@ Every state change goes through database functions, so amounts, approvers and si
    ต่อด้วย [`supabase/migrations/0011_multi_vendor.sql`](supabase/migrations/0011_multi_vendor.sql) กด **Run** (ซื้อหลายเจ้า แยกราย SKU — แต่ละเจ้าเสนอราคาไม่ครบทุกรายการได้ · ชื่อผู้ขายที่ซื้อจริงในรายการคำขอ) — **รันก่อนเปิดเว็บเวอร์ชันนี้**
    ต่อด้วย [`supabase/migrations/0012_report_no_required.sql`](supabase/migrations/0012_report_no_required.sql) กด **Run** (รายงานเลขที่บังคับกรอก และใช้เป็นเลขที่คำขอ ห้ามซ้ำ)
    ต่อด้วย [`supabase/migrations/0013_report_no_duplicates.sql`](supabase/migrations/0013_report_no_duplicates.sql) กด **Run** (รายงานเลขที่ใช้ซ้ำกับคำขออื่นได้)
+   ต่อด้วย [`supabase/migrations/0014_recall_request.sql`](supabase/migrations/0014_recall_request.sql) กด **Run** (ผู้จัดทำดึงคำขอที่กำลังรออนุมัติกลับมาแก้ไขได้)
    > ระบบที่ใช้งานอยู่แล้ว: รันเฉพาะไฟล์ที่ยังไม่เคยรัน ตามลำดับเลข ข้อมูลเดิมถูกแปลงให้อัตโนมัติ และรันซ้ำได้โดยไม่เสียหาย
 4. ไปที่ **Project Settings → API** (หรือ **Data API / API Keys**) จดค่า:
    - **Project URL** → ใช้เป็น `NEXT_PUBLIC_SUPABASE_URL`
@@ -206,6 +207,7 @@ psql -d qa_test -v ON_ERROR_STOP=1 -f supabase/tests/90_split_delete_company_res
 psql -d qa_test -v ON_ERROR_STOP=1 -f supabase/tests/91_multi_vendor_test.sql  # ends with: ALL 0011 TESTS PASSED
 psql -d qa_test -v ON_ERROR_STOP=1 -f supabase/tests/92_report_no_required_test.sql # runs 0012 itself; ends with: ALL 0012 TESTS PASSED
 psql -d qa_test -v ON_ERROR_STOP=1 -f supabase/tests/93_report_no_duplicates_test.sql # runs 0013 itself; ends with: ALL 0013 TESTS PASSED
+psql -d qa_test -v ON_ERROR_STOP=1 -f supabase/tests/94_recall_test.sql             # runs 0014 itself; ends with: ALL 0014 TESTS PASSED
 ```
 ครอบคลุม · Covers: first admin, applications, self-promotion blocked, server-side amounts and tiers, approver resolution by department, signatures required, forward rules, reject → reopen → resend (keeps number), admin remind/reassign/cancel, letter path rules, visibility for outsiders, disabled accounts.
 

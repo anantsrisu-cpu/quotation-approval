@@ -9,6 +9,7 @@ import { Chain, Chip, Loading, Modal } from '@/components/ui';
 import { PURP, SUBJ, dOnly, dt, fileSize, fmt } from '@/lib/format';
 import { daysText, itemsOf } from '@/lib/calc';
 import { CompareTable, DeliveryText, ItemsTable } from '@/components/ItemTables';
+import { EditRequestButton } from '@/components/EditRequest';
 import { downloadUrl, elementToPdf } from '@/lib/pdf';
 import { reportError } from '@/lib/errors';
 import type { LogEntry, RequestFile, RequestRow, RequestStep } from '@/lib/types';
@@ -181,12 +182,6 @@ export default function RequestDetail() {
       await load();
     }
   }
-  async function reopen() {
-    setBusy('reopen');
-    const { ok } = await run('reopen_request', sb.rpc('reopen_request', { p_id: id }));
-    setBusy(null);
-    if (ok) router.push(`/requests/new?id=${id}`);
-  }
 
   const co = company(r.company_id);
   const rejectedStep = steps.find((s) => s.status === 'rejected');
@@ -202,8 +197,7 @@ export default function RequestDetail() {
           <p className="lead"><span className="mono">{r.no || 'ยังไม่ออกเลข'}</span> · {SUBJ[r.subject_type]} · {deptTh(r.dept)} · {dt(r.submitted_at || r.created_at)}</p>
         </div>
         <div className="row" style={{ gap: 10 }}>
-          {isPrep && r.status === 'draft' && <Link className="btn o" href={`/requests/new?id=${r.id}`}>แก้ไขฉบับร่าง · Edit draft</Link>}
-          {isPrep && r.status === 'rejected' && <button className="btn o" disabled={!!busy} onClick={reopen}>แก้ไขและส่งใหม่ · Edit &amp; resend</button>}
+          {isPrep && ['draft', 'rejected', 'pending'].includes(r.status) && <EditRequestButton r={r} />}
           {isPrep && (has('preparer') || has('admin')) && <Link className="btn" href={`/requests/new?copy=${r.id}`}>ใช้เป็นแบบคำขอใหม่ · Copy to new</Link>}
           {(isPrep || has('admin')) && (r.status === 'pending' || r.status === 'draft') && (
             <button className="btn d" onClick={() => { setReason(''); setModal('cancel'); }}>ยกเลิกคำขอ · Cancel</button>
