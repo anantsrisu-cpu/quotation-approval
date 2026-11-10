@@ -267,3 +267,4 @@ table.cmp tr.why.split td{background:var(--sage-bg)}
 .install-steps{margin:0;padding-left:20px;font-size:14px;display:flex;flex-direction:column;gap:4px}
 .nav-install a{background:var(--brown-2);border:1px solid var(--tan);color:#fff!important;border-radius:10px}
 .nav-install a small,.nav-install .sub{color:#f3e9df!important}
+.in[aria-invalid="true"]{border-color:var(--bad-solid);box-shadow:0 0 0 1px var(--bad-solid)}

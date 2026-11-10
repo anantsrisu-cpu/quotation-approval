@@ -92,7 +92,7 @@ export function ItemsTable({ r }: { r: RequestRow }) {
                   <span className="mono" style={{ fontSize: 12 }}>{it.sku}</span> · {it.product_name || '—'}
                   {it.brand && <span className="chip st-draft" style={{ marginLeft: 6 }}>{it.brand}</span>}
                   {it.description && <div className="note" style={{ whiteSpace: 'pre-wrap', color: 'var(--ink-2)' }}>{it.description}</div>}
-                  {it.report_no && <div className="note" style={{ color: 'var(--ink-2)' }}>รายงานเลขที่ {it.report_no}</div>}
+                  {it.report_no && <div className="note" style={{ color: 'var(--ink-2)' }}>เลขที่ใบขอซื้อ {it.report_no}</div>}
                   {multi && (
                     <div className="note" style={{ color: 'var(--sage-ink)', fontWeight: 600 }}>
                       {splitOf(it).length

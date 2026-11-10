@@ -32,7 +32,7 @@ export default function MyRequests() {
       {list === null ? <Loading /> : <ReqTable list={list} empty='ยังไม่มีคำขอ กด "สร้างคำขอใหม่" เพื่อเริ่ม · No requests yet — press New request to start'
         actions={(r) => (
           <span className="row" style={{ gap: 6, flexWrap: 'nowrap' }}>
-            {['draft', 'rejected', 'pending'].includes(r.status) && <EditRequestButton r={r} sm />}
+            {['draft', 'rejected'].includes(r.status) && <EditRequestButton r={r} sm />}
             {canDelete(r) && <DeleteRequestButton r={r} />}
           </span>
         )} />}

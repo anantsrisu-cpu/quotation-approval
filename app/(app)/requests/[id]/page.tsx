@@ -197,7 +197,7 @@ export default function RequestDetail() {
           <p className="lead"><span className="mono">{r.no || 'ยังไม่ออกเลข'}</span> · {SUBJ[r.subject_type]} · {deptTh(r.dept)} · {dt(r.submitted_at || r.created_at)}</p>
         </div>
         <div className="row" style={{ gap: 10 }}>
-          {isPrep && ['draft', 'rejected', 'pending'].includes(r.status) && <EditRequestButton r={r} />}
+          {isPrep && ['draft', 'rejected'].includes(r.status) && <EditRequestButton r={r} />}
           {isPrep && (has('preparer') || has('admin')) && <Link className="btn" href={`/requests/new?copy=${r.id}`}>ใช้เป็นแบบคำขอใหม่ · Copy to new</Link>}
           {(isPrep || has('admin')) && (r.status === 'pending' || r.status === 'draft') && (
             <button className="btn d" onClick={() => { setReason(''); setModal('cancel'); }}>ยกเลิกคำขอ · Cancel</button>
@@ -232,7 +232,7 @@ export default function RequestDetail() {
                 ['ผู้ขาย · Vendor', r.bought_vendors && r.bought_vendors !== r.vendor ? `สั่งซื้อจาก ${r.bought_vendors} (เจ้าที่ 1: ${r.vendor})` : r.vendor],
                 ['เครดิต / Lead time', `${daysText(r.credit_days)} / ${daysText(r.lead_days)}`],
                 ['การรับประกัน · Warranty', r.warranty || '—'],
-                ['รายงานเลขที่ / วันที่อนุมัติ (หัวตาราง)', `${r.report_no || r.no || '—'} / ${r.report_date ? dOnly(r.report_date) : 'วันที่อนุมัติครบ'}`],
+                ['เลขที่ใบขอซื้อ / วันที่อนุมัติ (หัวตาราง)', `${r.report_no || r.no || '—'} / ${r.report_date ? dOnly(r.report_date) : 'วันที่อนุมัติครบ'}`],
                 ['เลขที่ใบเสนอราคา · Quote no.', r.quote_no || '—'],
                 ['ผู้ซื้อ · Buyer', name(r.buyer_id)],
                 ['บริษัทผู้ซื้อ · Buyer company', co?.th || '—'],

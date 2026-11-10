@@ -6,7 +6,7 @@ import { ApprovalDoc } from './ApprovalDoc';
 import { Loading, Modal, PageHead } from './ui';
 import { blankComp, blankItem, calcItems, compDiscounts, compPrices, itemsOf, parseDays, type DraftComp, type DraftItem } from '@/lib/calc';
 import type { DeliverySlot } from '@/lib/types';
-import { PURP, SUBJ, SUBJ_EN, fileSize, fmt, num } from '@/lib/format';
+import { PR_EXAMPLE, PR_FORMAT, PURP, SUBJ, SUBJ_EN, fileSize, fmt, isPr, normPr, num } from '@/lib/format';
 import { UnitField } from './UnitField';
 import type { ApproverPreview, LineItem, Product, RequestFile, RequestRow, RequestStep } from '@/lib/types';
 
@@ -293,7 +293,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
   }, [activeSku, sb]);
 
   const c = useMemo(() => calcItems(d?.items || [], vatRate, d?.comps || [], !!d?.no_comp, !!d?.multi_vendor), [d?.items, d?.comps, vatRate, d?.no_comp, d?.multi_vendor]);
-  // how many other requests already use this รายงานเลขที่ (allowed, just shown as a note)
+  // how many other requests already use this เลขที่ใบขอซื้อ (allowed, just shown as a note)
   const [rnoUsed, setRnoUsed] = useState(0);
   useEffect(() => {
     const no = d?.report_no?.trim();
@@ -344,7 +344,11 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
     if (d.multi_vendor && !d.no_comp && c.awards[i]?.best < 0) missing.push(`${L}: ยังไม่มีผู้ขายเสนอราคา กรอกราคาอย่างน้อย 1 เจ้า · No vendor quoted this item`);
     if (c.lines[i]?.discErr) missing.push(`${L}: ${c.lines[i].discErr} · Check the discount`);
   });
-  if (!d.report_no.trim()) missing.push('กรอกรายงานเลขที่ (ใช้เป็นเลขที่คำขอ) · Enter the report no.');
+  if (!d.report_no.trim()) missing.push('กรอกเลขที่ใบขอซื้อ (ใช้เป็นเลขที่คำขอ) · Enter the PR no.');
+  else if (!isPr(d.report_no)) missing.push(`เลขที่ใบขอซื้อต้องเป็นรูปแบบ ${PR_FORMAT} เช่น ${PR_EXAMPLE} · PR no. format ${PR_FORMAT}`);
+  d.items.forEach((it, k) => {
+    if (it.report_no.trim() && !isPr(it.report_no)) missing.push(`รายการที่ ${k + 1}: เลขที่ใบขอซื้อของรายการต้องเป็นรูปแบบ ${PR_FORMAT} หรือเว้นว่าง`);
+  });
   if (!d.dept) missing.push('เลือกฝ่ายที่ขอซื้อ · Choose the department');
   if (!d.vendor.trim()) missing.push('กรอกชื่อผู้ขาย · Enter the vendor');
   if (parseDays(d.credit_days).error) missing.push('เครดิต: ใส่จำนวนวันเป็นตัวเลข · Credit must be whole days');
@@ -608,7 +612,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
     <>
       <PageHead
         title={id ? (no ? `แก้ไขคำขอ ${no}` : 'แก้ไขฉบับร่าง') : 'สร้างคำขออนุมัติใหม่'}
-        lead="New approval request · เลขที่คำขอ = รายงานเลขที่ที่กรอก · the request number is the report no."
+        lead="New approval request · เลขที่คำขอ = เลขที่ใบขอซื้อที่กรอก · the request number is the PR no."
       >
         <button className="btn o" onClick={() => setModal('preview')}>ดูตัวอย่างร่าง · Preview draft</button>
       </PageHead>
@@ -664,9 +668,13 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
           <label className="f" htmlFor="f-quote">เลขที่ใบเสนอราคาผู้ขาย · Vendor quote no.
             <input className="in" id="f-quote" value={d.quote_no} onChange={(e) => set('quote_no', e.target.value)} />
           </label>
-          <label className="f" htmlFor="f-rno">รายงานเลขที่ · Report no. <span className="req">*</span>
-            <input className="in" id="f-rno" value={d.report_no} maxLength={60} placeholder="เช่น R11HO.2611-0005" aria-required="true" onChange={(e) => set('report_no', e.target.value)} />
-            <span className="note" style={{ fontWeight: 400 }}>ใช้เป็นเลขที่คำขอ และขึ้นที่ “รายงานเลขที่” หัวตารางเปรียบเทียบ · ใช้เลขซ้ำกับคำขออื่นได้</span>
+          <label className="f" htmlFor="f-rno">เลขที่ใบขอซื้อ · PR no. <span className="req">*</span>
+            <input className="in mono" id="f-rno" value={d.report_no} maxLength={15} placeholder={`${PR_FORMAT} เช่น ${PR_EXAMPLE}`} aria-required="true"
+              aria-invalid={!!d.report_no.trim() && !isPr(d.report_no)} aria-describedby="f-rno-help" autoCapitalize="characters" spellCheck={false}
+              onChange={(e) => set('report_no', normPr(e.target.value))} />
+            {d.report_no.trim() && !isPr(d.report_no)
+              ? <span className="note" id="f-rno-help" style={{ fontWeight: 500, color: 'var(--bad)' }}>รูปแบบต้องเป็น {PR_FORMAT} (x = ตัวเลข, y = ตัวอักษรอังกฤษ) เช่น {PR_EXAMPLE}</span>
+              : <span className="note" id="f-rno-help" style={{ fontWeight: 400 }}>รูปแบบ {PR_FORMAT} (x = ตัวเลข, y = ตัวอักษรอังกฤษ) · ใช้เป็นเลขที่คำขอ และขึ้นที่ “เลขที่ใบขอซื้อ” หัวตาราง · ใช้ซ้ำกับคำขออื่นได้</span>}
             {rnoUsed > 0 && (
               <span className="note" id="f-rno-used" style={{ fontWeight: 500, color: 'var(--ink-2)' }}>
                 ℹ เลขนี้มีคำขออื่นใช้แล้ว {rnoUsed} ใบ (ใช้ซ้ำได้) · Also used on {rnoUsed} other request{rnoUsed > 1 ? 's' : ''}
@@ -774,9 +782,10 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
                     <label className="f" htmlFor={`pd${i}`}>เมื่อ (วันที่)
                       <input className="in" type="date" id={`pd${i}`} value={it.prev_date} onChange={(e) => setItem(i, { prev_date: e.target.value })} />
                     </label>
-                    <label className="f" htmlFor={`rn${i}`} title="พิมพ์ต่อท้าย Description ในตารางเปรียบเทียบ">รายงานเลขที่ (ของรายการนี้)
-                      <input className="in" id={`rn${i}`} value={it.report_no} maxLength={60} placeholder="ไม่บังคับ" onChange={(e) => setItem(i, { report_no: e.target.value })}
-                        onPaste={(e) => pasteDown(e, (k, v) => setItem(k, { report_no: v }), i)} />
+                    <label className="f" htmlFor={`rn${i}`} title="พิมพ์ต่อท้าย Description ในตารางเปรียบเทียบ">เลขที่ใบขอซื้อ (ของรายการนี้)
+                      <input className="in mono" id={`rn${i}`} value={it.report_no} maxLength={15} placeholder={`ไม่บังคับ · ${PR_FORMAT}`} autoCapitalize="characters" spellCheck={false}
+                        aria-invalid={!!it.report_no.trim() && !isPr(it.report_no)} onChange={(e) => setItem(i, { report_no: normPr(e.target.value) })}
+                        onPaste={(e) => pasteDown(e, (k, v) => setItem(k, { report_no: normPr(v) }), i)} />
                     </label>
                   </div>
                   <div className="item-info" aria-live="polite">

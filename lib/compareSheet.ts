@@ -230,7 +230,7 @@ function rowHtml(d: SheetData, k: number) {
     it.prevPrice != null
       ? `${money(it.prevPrice)}${it.prevVendor || it.prevDate ? `<span class="sub">${esc(it.prevVendor || '')}${it.prevVendor && it.prevDate ? ' / ' : ''}${esc(dmy(it.prevDate))}</span>` : ''}`
       : '';
-  return `<tr data-k="${k}"><td class="c">${k + 1}</td><td>${esc(it.sku)}</td><td>${esc(it.name)}${it.description ? `<div class="desc">${esc(it.description)}</div>` : ''}${it.reportNo ? `<div class="desc">รายงานเลขที่ ${esc(it.reportNo)}</div>` : ''}</td>
+  return `<tr data-k="${k}"><td class="c">${k + 1}</td><td>${esc(it.sku)}</td><td>${esc(it.name)}${it.description ? `<div class="desc">${esc(it.description)}</div>` : ''}${it.reportNo ? `<div class="desc">เลขที่ใบขอซื้อ ${esc(it.reportNo)}</div>` : ''}</td>
 <td>${esc(it.brand || '')}</td><td class="n">${qtyFmt(it.qty)}</td><td class="c">${esc(it.unit)}</td><td class="n" style="white-space:normal;text-align:right">${prev}</td>
 ${d.vendors
   .map((v, vi) => {

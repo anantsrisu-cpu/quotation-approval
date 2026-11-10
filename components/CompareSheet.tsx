@@ -124,7 +124,7 @@ export function useSheetData(r: RequestRow, steps: RequestStep[], draft: boolean
     companyId: r.company_id,
     info: [
       // typed on the request; otherwise the system number and the final-approval date
-      ['รายงานเลขที่', r.report_no?.trim() || r.no || '(ยังไม่ออกเลข)'],
+      ['เลขที่ใบขอซื้อ', r.report_no?.trim() || r.no || '(ยังไม่ออกเลข)'],
       ['วันที่อนุมัติ', r.report_date ? dOnly(r.report_date) : draft ? '(รออนุมัติ)' : dOnly(r.completed_at || r.letter_at)],
       ['ฝ่ายที่ขอซื้อ', deptTh(r.dept)],
     ],

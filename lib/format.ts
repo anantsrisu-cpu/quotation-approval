@@ -3,6 +3,13 @@ import type { RequestStatus } from './types';
 export const SUBJ: Record<string, string> = { stock: 'สั่งซื้อเพื่อสต๊อค', general: 'สั่งซื้อทั่วไป', hire: 'สั่งจ้าง' };
 export const SUBJ_EN: Record<string, string> = { stock: 'Purchase for stock', general: 'General purchase', hire: 'Hire / service' };
 export const PURP: Record<string, string> = { repair: 'ซ่อมแซม', replace: 'ทดแทนของเดิม', stock: 'Stock' };
+/** เลขที่ใบขอซื้อ: R1x-yy.xxxxxxxx — x a digit, y an English letter (same rule as is_pr_no() in the database) */
+export const PR_RE = /^R1[0-9]-[A-Z]{2}\.[0-9]{8}$/;
+export const PR_FORMAT = 'R1x-yy.xxxxxxxx';
+export const PR_EXAMPLE = 'R11-HO.26110005';
+export const normPr = (v: string) => v.toUpperCase().replace(/\s+/g, '');
+export const isPr = (v: string) => PR_RE.test(normPr(v));
+
 export const UNITS = ['เครื่อง', 'ชิ้น', 'ชุด', 'กล่อง', 'รีม', 'ตัว', 'งาน', 'อัน', 'แพ็ค', 'ม้วน', 'เมตร', 'ลิตร'];
 export const ROLE_TH: Record<string, string> = { preparer: 'ผู้จัดทำ', approver: 'ผู้อนุมัติ', admin: 'ผู้ดูแลระบบ' };
 export const ROLE_EN: Record<string, string> = { preparer: 'Preparer', approver: 'Approver', admin: 'Admin' };

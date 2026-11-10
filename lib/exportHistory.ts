@@ -41,7 +41,7 @@ export async function exportHistory(rows: Row[], ctx: Ctx, filename: string) {
   const N = (v: number | null | undefined, fmt = '#,##0.00') => (v == null ? { value: '' , type: String } : { value: Number(v), type: Number, format: fmt });
   const D = (v?: string | null) => (v ? { value: d8(v) as Date, type: Date, format: 'dd/mm/yyyy hh:mm' } : { value: '', type: String });
 
-  const reqHead = ['เลขที่', 'รายงานเลขที่', 'สถานะ', 'วันที่สร้าง', 'วันที่ส่ง', 'วันที่อนุมัติครบ', 'เรื่อง', 'ฝ่ายที่ขอซื้อ', 'บริษัทผู้ซื้อ', 'ผู้จัดทำ', 'ผู้ซื้อ',
+  const reqHead = ['เลขที่', 'เลขที่ใบขอซื้อ', 'สถานะ', 'วันที่สร้าง', 'วันที่ส่ง', 'วันที่อนุมัติครบ', 'เรื่อง', 'ฝ่ายที่ขอซื้อ', 'บริษัทผู้ซื้อ', 'ผู้จัดทำ', 'ผู้ซื้อ',
     'ผู้ขายที่สั่งซื้อ (✓)', 'จำนวนรายการ', 'ยอดก่อน VAT', 'VAT', 'ยอดรวม', 'ลำดับผู้อนุมัติ'];
   const itemHead = ['เลขที่', 'สถานะ', 'รายการที่', 'SKU', 'ชื่อสินค้า', 'รายละเอียด', 'จำนวนทั้งหมด', 'หน่วย', 'ผู้ขายที่สั่งซื้อ', 'จำนวนที่ซื้อ', 'ราคาสุทธิ/หน่วย', 'ยอดก่อน VAT', 'แบ่งซื้อ', 'เหตุผล'];
   const reqData: unknown[][] = [reqHead.map(H)];
