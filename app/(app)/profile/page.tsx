@@ -34,6 +34,10 @@ export default function ProfilePage() {
   return (
     <>
       <PageHead title="บัญชีและลายเซ็นของฉัน" lead="My account & signature" />
+      <div className="card" id="install" style={{ scrollMarginTop: 80 }}>
+        <h2>ติดตั้งแอปบนมือถือ · Install on your phone</h2>
+        <InstallApp />
+      </div>
       <div className="row">
         <div className="card grow">
           <h2>ข้อมูลบัญชี · Account</h2>
@@ -46,8 +50,6 @@ export default function ProfilePage() {
             <div><dt>ตำแหน่งอนุมัติ · Approver position</dt><dd>{me.position ? posTh(me.position) : '—'}</dd></div>
           </dl>
           <span className="note">ต้องการแก้ไขข้อมูลหรือบทบาท ติดต่อผู้ดูแลระบบ · Ask the admin to change your details or roles.</span>
-          <h2 style={{ marginTop: 8 }}>ติดตั้งแอปบนมือถือ · Install on your phone</h2>
-          <InstallApp />
         </div>
         <div className="card side" style={{ border: '2px solid var(--brown)' }}>
           <h2>ลายเซ็น · Signature</h2>

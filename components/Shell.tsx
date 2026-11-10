@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { useApp } from './AppProvider';
 import { ROLE_TH, dt } from '@/lib/format';
 import { Loading } from './ui';
-import { InstallBanner } from './Pwa';
+import { InstallBanner, useCanInstall } from './Pwa';
 
 function NavLink({ href, th, en, count, exact }: { href: string; th: string; en: string; count?: number; exact?: boolean }) {
   const path = usePathname();
@@ -74,6 +74,7 @@ function Bell() {
 
 export function Shell({ children }: { children: React.ReactNode }) {
   const { ready, me, has, waitingCount, sb } = useApp();
+  const canInstall = useCanInstall();
   const path = usePathname();
   const router = useRouter();
   const active = me?.status === 'active';
@@ -127,6 +128,11 @@ export function Shell({ children }: { children: React.ReactNode }) {
       <div className="shell">
         {active && (
           <nav className="nav" aria-label="เมนู · Menu">
+            {canInstall && (
+              <div className="nav-install">
+                <NavLink href="/profile#install" th="📲 ติดตั้งแอป" en="Install the app" />
+              </div>
+            )}
             {(has('preparer') || has('admin')) && (
               <div>
                 <h3>ผู้จัดทำ · PREPARER</h3>
