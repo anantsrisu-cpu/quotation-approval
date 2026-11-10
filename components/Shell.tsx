@@ -107,13 +107,30 @@ export function Shell({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [narrow, navOpen]);
   // the sidebar sits right under the header, whatever its height
+  // (one observer, updated on the next frame and only when the height really changes:
+  // writing the layout inside the observer callback made Chrome report "ResizeObserver loop")
   useEffect(() => {
     const el = topRef.current;
     if (!el) return;
-    const ro = new ResizeObserver(() => document.documentElement.style.setProperty('--top-h', `${el.offsetHeight}px`));
+    let last = -1;
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      const h = el.offsetHeight;
+      if (h === last) return;
+      last = h;
+      document.documentElement.style.setProperty('--top-h', `${h}px`);
+    };
+    update();
+    const ro = new ResizeObserver(() => {
+      if (!frame) frame = requestAnimationFrame(update);
+    });
     ro.observe(el);
-    return () => ro.disconnect();
-  });
+    return () => {
+      ro.disconnect();
+      if (frame) cancelAnimationFrame(frame);
+    };
+  }, [ready, me?.status]);
   const toggleNav = () => {
     const next = !navOpen;
     setNavOpen(next);

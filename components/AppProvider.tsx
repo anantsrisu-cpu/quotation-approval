@@ -184,7 +184,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // send unexpected browser errors to the admin bug list
   useEffect(() => {
-    const onErr = (e: ErrorEvent) => reportError(e.message || 'Script error', { action: 'window.onerror', detail: e.error?.stack || `${e.filename}:${e.lineno}` });
+    // browser notices that are not errors in the app (nothing breaks for the user)
+    const HARMLESS = /ResizeObserver loop (completed with undelivered notifications|limit exceeded)/i;
+    const onErr = (e: ErrorEvent) => {
+      if (HARMLESS.test(e.message || '')) return;
+      reportError(e.message || 'Script error', { action: 'window.onerror', detail: e.error?.stack || `${e.filename}:${e.lineno}` });
+    };
     const onRej = (e: PromiseRejectionEvent) => {
       const r: any = e.reason;
       reportError(r?.message || String(r), { action: 'unhandledrejection', detail: r?.stack || '' });
