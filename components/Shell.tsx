@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useApp } from './AppProvider';
 import { ROLE_TH, dt } from '@/lib/format';
 import { Loading } from './ui';
@@ -79,6 +79,49 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const active = me?.status === 'active';
 
+  // sidebar: on wide screens it stays open unless closed (remembered); on phones it is a drawer
+  const NARROW = '(max-width: 900px)';
+  const [navOpen, setNavOpen] = useState(false);
+  const [narrow, setNarrow] = useState(false);
+  const topRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const mq = window.matchMedia(NARROW);
+    const apply = () => {
+      setNarrow(mq.matches);
+      let saved = 'open';
+      try { saved = localStorage.getItem('qa-nav') || 'open'; } catch { /* storage blocked */ }
+      setNavOpen(!mq.matches && saved !== 'closed');
+    };
+    apply();
+    mq.addEventListener('change', apply);
+    return () => mq.removeEventListener('change', apply);
+  }, []);
+  // the drawer closes after choosing a page
+  useEffect(() => {
+    if (narrow) setNavOpen(false);
+  }, [path, narrow]);
+  useEffect(() => {
+    if (!(narrow && navOpen)) return;
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setNavOpen(false);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [narrow, navOpen]);
+  // the sidebar sits right under the header, whatever its height
+  useEffect(() => {
+    const el = topRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => document.documentElement.style.setProperty('--top-h', `${el.offsetHeight}px`));
+    ro.observe(el);
+    return () => ro.disconnect();
+  });
+  const toggleNav = () => {
+    const next = !navOpen;
+    setNavOpen(next);
+    if (!narrow) {
+      try { localStorage.setItem('qa-nav', next ? 'open' : 'closed'); } catch { /* ignore */ }
+    }
+  };
+
   // account gate: anyone not yet active goes to the application page
   useEffect(() => {
     if (!ready || !me) return;
@@ -112,7 +155,16 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
   return (
     <>
-      <header className="top">
+      <header className="top" ref={topRef}>
+        {active && (
+          <button type="button" className="menu-btn" onClick={toggleNav} aria-expanded={navOpen} aria-controls="side-nav"
+            aria-label={navOpen ? 'ซ่อนเมนู · Hide menu' : 'แสดงเมนู · Show menu'} title={navOpen ? 'ซ่อนเมนู · Hide menu' : 'แสดงเมนู · Show menu'}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+              {navOpen && narrow ? <><path d="M6 6l12 12" /><path d="M18 6L6 18" /></> : <><path d="M4 6h16" /><path d="M4 12h16" /><path d="M4 18h16" /></>}
+            </svg>
+            {!navOpen && waitingCount > 0 && <span className="menu-cnt" aria-label={`รออนุมัติ ${waitingCount}`}>{waitingCount}</span>}
+          </button>
+        )}
         <Link href="/" className="brand" style={{ color: 'inherit', textDecoration: 'none' }}>
           <span className="logo" aria-hidden="true">
             <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M7 3h7l5 5v13H7z" /><path d="M10 14l2 2 4-4" /></svg>
@@ -125,9 +177,18 @@ export function Shell({ children }: { children: React.ReactNode }) {
         {active && <Bell />}
         <button className="out" onClick={signOut}>ออกจากระบบ · Sign out</button>
       </header>
-      <div className="shell">
+      <div className={`shell${active && navOpen ? ' nav-open' : ' nav-closed'}`}>
+        {active && narrow && navOpen && <div className="nav-backdrop" onClick={() => setNavOpen(false)} aria-hidden="true" />}
         {active && (
-          <nav className="nav" aria-label="เมนู · Menu">
+          <nav className="nav" id="side-nav" aria-label="เมนู · Menu" aria-hidden={!navOpen ? true : undefined} inert={!navOpen ? true : undefined}>
+            {narrow && (
+              <div className="nav-head">
+                <b>เมนู · Menu</b>
+                <button type="button" className="nav-close" onClick={() => setNavOpen(false)} aria-label="ปิดเมนู · Close menu">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M6 6l12 12" /><path d="M18 6L6 18" /></svg>
+                </button>
+              </div>
+            )}
             {canInstall && (
               <div className="nav-install">
                 <NavLink href="/profile#install" th="📲 ติดตั้งแอป" en="Install the app" />

@@ -31,8 +31,23 @@ a{color:var(--brown)} a:hover{color:var(--mauve)}
 .bell .badge{position:absolute;top:-4px;right:-4px;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:var(--tan);color:var(--brown);font-size:11px;font-weight:700;display:grid;place-items:center}
 
 /* shell */
-.shell{display:flex;flex-wrap:wrap;align-items:stretch;min-height:calc(100% - 64px)}
-.nav{flex:1 1 230px;max-width:100%;background:var(--brown);color:#F4EEE8;padding:14px 12px 24px;display:flex;flex-direction:column;gap:16px}
+.shell{display:flex;align-items:flex-start;min-height:calc(100% - 64px)}
+/* sidebar: sticky under the header on wide screens, hidden when closed */
+.nav{flex:0 0 248px;width:248px;position:sticky;top:var(--top-h,60px);height:calc(100vh - var(--top-h,60px));height:calc(100dvh - var(--top-h,60px));overflow-y:auto;overscroll-behavior:contain;background:var(--brown);color:#F4EEE8;padding:14px 12px 24px;display:flex;flex-direction:column;gap:16px}
+.shell.nav-closed .nav{display:none}
+.menu-btn{position:relative;display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;border:1px solid var(--mauve);border-radius:10px;background:transparent;color:#F4EEE8;cursor:pointer;flex:none}
+.menu-btn:hover,.menu-btn:focus-visible{background:#5d3726}
+.menu-cnt{position:absolute;top:-6px;right:-6px;min-width:20px;height:20px;padding:0 5px;border-radius:999px;background:var(--tan);color:var(--brown);font-size:12px;font-weight:700;line-height:20px;text-align:center}
+.nav-backdrop{display:none}
+.nav-head{display:flex;align-items:center;justify-content:space-between;padding:0 4px 0 10px;font-size:15px}
+.nav .nav-close{width:44px;min-height:44px;justify-content:center;border:1px solid var(--mauve);padding:0}
+/* phones and small tablets: the sidebar is a drawer over the page */
+@media (max-width:900px){
+  .nav{position:fixed;z-index:40;top:0;left:0;bottom:0;width:min(300px,86vw);height:auto;padding-top:calc(env(safe-area-inset-top,0px) + 16px);padding-bottom:calc(env(safe-area-inset-bottom,0px) + 24px);transform:translateX(-102%);transition:transform .2s ease;box-shadow:4px 0 24px rgba(0,0,0,.25)}
+  .shell.nav-closed .nav{display:flex}
+  .shell.nav-open .nav{transform:none}
+  .nav-backdrop{display:block;position:fixed;inset:0;z-index:39;background:rgba(30,15,8,.45)}
+}
 .nav h3{margin:0 10px 4px;font-size:11px;letter-spacing:.07em;color:var(--tan);font-weight:600}
 .nav a,.nav button{width:100%;text-align:left;border:none;background:transparent;color:#F4EEE8;border-radius:8px;min-height:44px;padding:6px 12px;display:flex;align-items:center;gap:10px;cursor:pointer}
 .nav a[aria-current="page"]{background:var(--brown-2);font-weight:600}
@@ -40,7 +55,7 @@ a{color:var(--brown)} a:hover{color:var(--mauve)}
 .nav .cnt{margin-left:auto;background:var(--tan);color:var(--brown);border-radius:999px;font-size:12px;font-weight:700;padding:1px 8px}
 .nav .sub{display:block;font-size:12px;color:var(--beige);font-weight:400}
 .main{flex:999 1 560px;min-width:0;padding-block:24px 56px;padding-inline:24px;display:flex;flex-direction:column;gap:20px}
-@media (max-width:640px){.main{padding-inline:16px}.nav{flex-direction:row;overflow-x:auto;gap:4px;padding:8px}.nav h3{display:none}.nav a,.nav a,.nav button{width:auto;white-space:nowrap}.nav .sub{display:none}}
+@media (max-width:640px){.main{padding-inline:16px}}
 
 /* type */
 h1{margin:0;font-size:26px;line-height:1.25;text-wrap:balance}
@@ -250,5 +265,5 @@ table.cmp tr.why.split td{background:var(--sage-bg)}
 .multi-list .in{min-width:0;flex:1}
 /* install the app (PWA) */
 .install-steps{margin:0;padding-left:20px;font-size:14px;display:flex;flex-direction:column;gap:4px}
-.nav-install a{background:var(--brown);color:#fff!important;border-radius:10px}
+.nav-install a{background:var(--brown-2);border:1px solid var(--tan);color:#fff!important;border-radius:10px}
 .nav-install a small,.nav-install .sub{color:#f3e9df!important}
