@@ -293,6 +293,20 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
   }, [activeSku, sb]);
 
   const c = useMemo(() => calcItems(d?.items || [], vatRate, d?.comps || [], !!d?.no_comp, !!d?.multi_vendor), [d?.items, d?.comps, vatRate, d?.no_comp, d?.multi_vendor]);
+  // how many other requests already use this รายงานเลขที่ (allowed, just shown as a note)
+  const [rnoUsed, setRnoUsed] = useState(0);
+  useEffect(() => {
+    const no = d?.report_no?.trim();
+    if (!no) {
+      setRnoUsed(0);
+      return;
+    }
+    const t = setTimeout(async () => {
+      const { data, error } = await sb.rpc('report_no_count', { p_no: no, p_id: id || null });
+      setRnoUsed(!error && typeof data === 'number' ? data : 0);
+    }, 500);
+    return () => clearTimeout(t);
+  }, [d?.report_no, id, sb]);
 
   // who must approve this amount (same rule the server uses)
   useEffect(() => {
@@ -652,7 +666,12 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
           </label>
           <label className="f" htmlFor="f-rno">รายงานเลขที่ · Report no. <span className="req">*</span>
             <input className="in" id="f-rno" value={d.report_no} maxLength={60} placeholder="เช่น R11HO.2611-0005" aria-required="true" onChange={(e) => set('report_no', e.target.value)} />
-            <span className="note" style={{ fontWeight: 400 }}>ใช้เป็นเลขที่คำขอ และขึ้นที่ “รายงานเลขที่” หัวตารางเปรียบเทียบ · ห้ามซ้ำกับคำขออื่น</span>
+            <span className="note" style={{ fontWeight: 400 }}>ใช้เป็นเลขที่คำขอ และขึ้นที่ “รายงานเลขที่” หัวตารางเปรียบเทียบ · ใช้เลขซ้ำกับคำขออื่นได้</span>
+            {rnoUsed > 0 && (
+              <span className="note" id="f-rno-used" style={{ fontWeight: 500, color: 'var(--ink-2)' }}>
+                ℹ เลขนี้มีคำขออื่นใช้แล้ว {rnoUsed} ใบ (ใช้ซ้ำได้) · Also used on {rnoUsed} other request{rnoUsed > 1 ? 's' : ''}
+              </span>
+            )}
           </label>
           <label className="f" htmlFor="f-rdate">วันที่อนุมัติ (ถ้ามี) · Approval date
             <input className="in" type="date" id="f-rdate" value={d.report_date} onChange={(e) => set('report_date', e.target.value)} />
