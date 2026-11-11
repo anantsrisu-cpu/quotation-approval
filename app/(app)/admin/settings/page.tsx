@@ -14,6 +14,21 @@ const dupCode = (codes: string[]) => codes.find((c, i) => c && codes.indexOf(c) 
 /** 1000000 → "1,000,000" · 1000000.5 → "1,000,000.50" */
 const baht = (n: number) => (Number.isInteger(n) ? n.toLocaleString('en-US') : fmt(n));
 type TierLike = { max: number | null; steps: string[]; label: string };
+
+/**
+ * Each settings card is its own form, so the browser's autofill only looks at the
+ * fields of that card (the page has hundreds of inputs) and does not offer saved
+ * names or addresses. Enter never submits anything: the first submit button is disabled.
+ */
+function Section({ className, children }: { className: string; children: React.ReactNode }) {
+  return (
+    <form className={className} autoComplete="off" noValidate onSubmit={(e) => e.preventDefault()}>
+      <button type="submit" disabled hidden aria-hidden="true" tabIndex={-1} />
+      {children}
+    </form>
+  );
+}
+
 /**
  * Amount range of each tier, in order: a tier covers everything above the
  * previous tier's limit up to and including its own (same rule as the database).
@@ -50,14 +65,14 @@ function General() {
     if (ok) { toast('ok', 'บันทึกแล้ว · Saved', 'คำขอใหม่ใช้ค่านี้ทันที · New requests use this now'); reloadRefs(); }
   }
   return (
-    <div className="card">
+    <Section className="card">
       <div className="actions"><h2>ค่าทั่วไป · General</h2><button className="btn p sm" onClick={save}>บันทึก · Save</button></div>
       <div className="grid">
         <label className="f">VAT (%)<input className="in r" inputMode="decimal" value={vat} onChange={(e) => setVat(e.target.value)} /></label>
         <label className="f">รหัสนำหน้าเลขที่ · Number prefix<input className="in mono" value={prefix} onChange={(e) => setPrefix(e.target.value)} /><span className="note" style={{ fontWeight: 400 }}>เช่น {prefix || 'QT'}-{new Date().getFullYear()}-0001</span></label>
         <label className="f span2">ผู้รับในหนังสือ (เรียน) · Letter recipient<input className="in" value={rec} onChange={(e) => setRec(e.target.value)} /></label>
       </div>
-    </div>
+    </Section>
   );
 }
 
@@ -104,7 +119,7 @@ function Positions() {
     if (ok) { toast('ok', 'ลบแล้ว · Deleted', code); reloadRefs(); }
   }
   return (
-    <div className="card">
+    <Section className="card">
       <div className="actions"><h2>ตำแหน่งผู้อนุมัติ · Approver positions</h2>
         <div className="row" style={{ gap: 8 }}>
           <button className="btn sm" onClick={fillFromTiers} title="ใช้ระดับวงเงินที่บันทึกไว้ เติมช่อง “ช่วงวงเงิน” ของตำแหน่งที่อนุมัติเป็นคนสุดท้าย">เติมช่วงวงเงินจากระดับวงเงิน · Fill from tiers</button>
@@ -128,7 +143,7 @@ function Positions() {
           </label>
           {p.sign_mode === 'wet' && (
             <label className="f" style={{ flex: '3 1 220px' }}>ชื่อผู้ลงนาม (ลายเซ็นสด)
-              <input className="in wet-name" value={p.wet_name || ''} maxLength={100} placeholder="เว้นว่าง = ใช้ชื่อผู้อนุมัติของตำแหน่งนี้"
+              <input className="in wet-name" autoComplete="off" value={p.wet_name || ''} maxLength={100} placeholder="เว้นว่าง = ใช้ชื่อผู้อนุมัติของตำแหน่งนี้"
                 onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, wet_name: e.target.value } : x)))} />
             </label>
           )}
@@ -137,7 +152,7 @@ function Positions() {
             : <button className="btn sm d" onClick={() => remove(p.code)} title="ลบได้เมื่อไม่มีผู้ใช้หรือคำขอใช้ตำแหน่งนี้">ลบ</button>}
         </div>
       ))}
-    </div>
+    </Section>
   );
 }
 
@@ -177,7 +192,7 @@ function Tiers() {
   }
 
   return (
-    <div className="card">
+    <Section className="card">
       <div className="actions"><h2>ระดับวงเงิน (รวม VAT) · Price tiers incl. VAT</h2>
         <div className="row" style={{ gap: 8 }}>
           <button className="btn sm" onClick={() => setRows([...rows, { label: '', max: '', steps: [], sort: 0 }])}>+ เพิ่มระดับ · Add tier</button>
@@ -230,7 +245,7 @@ function Tiers() {
           <div className="note">ตามค่าที่แสดงบนหน้านี้ (ยังไม่ต้องกดบันทึก) · Uses the values on screen</div>
         </div>
       </div>
-    </div>
+    </Section>
   );
 }
 
@@ -323,7 +338,7 @@ function Departments() {
     if (ok) { toast('ok', 'บันทึกฝ่ายแล้ว · Departments saved', ''); reloadRefs(); }
   }
   return (
-    <div className="card">
+    <Section className="card">
       <div className="actions"><h2>ฝ่าย (ฝ่ายที่ขอซื้อ) · Departments</h2>
         <div className="row" style={{ gap: 8 }}>
           <button className="btn sm" id="dept-template" onClick={template}>ดาวน์โหลด Template Excel</button>
@@ -356,7 +371,7 @@ function Departments() {
           <label className="check"><input type="checkbox" checked={d.active} onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, active: e.target.checked } : x)))} />ใช้งาน</label>
         </div>
       ))}
-    </div>
+    </Section>
   );
 }
 
@@ -395,7 +410,7 @@ function Companies() {
     if (ok) reloadRefs();
   }
   return (
-    <div className="card">
+    <Section className="card">
       <div className="actions"><h2>บริษัทผู้ซื้อและหัวจดหมาย · Buyer companies & letterhead</h2>
         <div className="row" style={{ gap: 8 }}>
           <button className="btn sm" onClick={() => setRows([...rows, { id: '', th: '', en: '', initials: '', address: '', logo_path: null, sort: (rows.at(-1)?.sort || 0) + 10, active: true, isNew: true }])}>+ เพิ่ม · Add</button>
@@ -427,7 +442,7 @@ function Companies() {
           </div>
         );
       })}
-    </div>
+    </Section>
   );
 }
 
@@ -473,7 +488,7 @@ function ResetRequests() {
     }
   }
   return (
-    <div className="card danger-zone">
+    <Section className="card danger-zone">
       <h2>ล้างข้อมูลทดสอบก่อน Go-Live · Clear test data</h2>
       <span className="note">ลบ<b>คำขอทุกใบ</b> (ทุกสถานะ) พร้อมไฟล์แนบ ประวัติ ขั้นตอนอนุมัติ และการแจ้งเตือนของคำขอ · เลขที่คำขอ (เลขที่ใบขอซื้อ) ที่เคยใช้จะนำกลับมาใช้ได้อีก · ไม่ลบผู้ใช้ ลายเซ็น สินค้า และการตั้งค่า · ทำได้เฉพาะผู้ดูแลระบบ และกู้คืนไม่ได้</span>
       <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
@@ -497,7 +512,7 @@ function ResetRequests() {
           {busy || `ลบคำขอทั้งหมด ${total} ใบ · Delete all`}
         </button>
       </div>
-    </div>
+    </Section>
   );
 }
 
@@ -534,7 +549,7 @@ function ApproverCompanies() {
     used.filter((pos) => !list.some((p) => p.position === pos && (!(p.companies || []).length || (p.companies || []).includes(c.id))))
       .map((pos) => `${c.th}: ไม่มี${positions.find((x) => x.code === pos)?.th || pos}`));
   return (
-    <div className="card">
+    <Section className="card">
       <div className="actions"><h2>ผู้อนุมัติตามบริษัท · Approvers by company</h2>
         <button className="btn p sm" onClick={save} disabled={!changed.length}>บันทึก{changed.length ? ` (${changed.length})` : ''} · Save</button>
       </div>
@@ -569,7 +584,7 @@ function ApproverCompanies() {
         </div>
       )}
       {gaps.length > 0 && <div className="warn-box">ยังส่งคำขอไม่ได้ในบางกรณี: {gaps.join(' · ')}</div>}
-    </div>
+    </Section>
   );
 }
 
@@ -590,7 +605,7 @@ function Units() {
     if (ok) { toast('ok', 'บันทึกหน่วยสินค้าแล้ว · Units saved', 'ใช้ได้ทันทีในช่อง “หน่วย” · Available in every unit dropdown'); reloadRefs(); }
   }
   return (
-    <div className="card">
+    <Section className="card">
       <div className="actions"><h2>หน่วยสินค้า · Units <span className="chip st-draft">{rows.filter((u) => u.active).length} หน่วยที่ใช้งาน</span></h2>
         <div className="row" style={{ gap: 8 }}>
           <button className="btn sm" onClick={add}>+ เพิ่มหน่วย · Add</button>
@@ -612,7 +627,7 @@ function Units() {
           </div>
         ))}
       </div>
-    </div>
+    </Section>
   );
 }
 
@@ -638,7 +653,7 @@ function Places() {
     reloadRefs();
   }
   return (
-    <div className="card">
+    <Section className="card">
       <div className="actions"><h2>สถานที่จัดส่งสินค้า · Delivery places</h2>
         <div className="row" style={{ gap: 8 }}>
           <button className="btn sm" onClick={() => setRows([...rows, { name: '', slot: 1, sort: (rows.filter((x) => x.slot === 1).at(-1)?.sort || 0) + 10, active: true }])}>+ เพิ่ม · Add</button>
@@ -659,7 +674,7 @@ function Places() {
           <label className="check"><input type="checkbox" checked={p.active} onChange={(e) => upd(i, { active: e.target.checked })} />ใช้งาน</label>
         </div>
       ))}
-    </div>
+    </Section>
   );
 }
 

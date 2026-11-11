@@ -3,6 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getSupabase } from '@/lib/supabase/client';
 import { reportError } from '@/lib/errors';
+import { startSlowWatch } from '@/lib/slowWatch';
 import { UNITS, errText } from '@/lib/format';
 import type { Company, DeliveryPlace, Department, Notification, Position, Profile, Role, Settings, Tier, UnitRow } from '@/lib/types';
 
@@ -196,7 +197,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     };
     window.addEventListener('error', onErr);
     window.addEventListener('unhandledrejection', onRej);
+    // the page froze for 1 s or more: record what kept the browser busy
+    const stopSlow = startSlowWatch();
     return () => {
+      stopSlow();
       window.removeEventListener('error', onErr);
       window.removeEventListener('unhandledrejection', onRej);
     };
