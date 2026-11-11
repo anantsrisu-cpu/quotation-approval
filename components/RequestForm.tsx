@@ -1,4 +1,5 @@
 'use client';
+import { downloadItemForm, readItemFile } from '@/lib/itemSheet';
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useApp } from './AppProvider';
@@ -124,6 +125,8 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
   const [busy, setBusy] = useState<string | null>(null);
   const [modal, setModal] = useState<null | 'preview' | 'send' | 'delete' | 'paste'>(null);
   const [pasteText, setPasteText] = useState('');
+  const [pasteFile, setPasteFile] = useState('');
+  const [dragging, setDragging] = useState(false);
   const [message, setMessage] = useState('');
   const [tried, setTried] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -215,6 +218,35 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
         })),
       };
     });
+  /** an Excel form dropped on the items section or chosen in the paste window */
+  async function takeItemFile(file: File) {
+    try {
+      const text = await readItemFile(file);
+      setPasteText(text);
+      setPasteFile(file.name);
+      setModal('paste');
+      if (!parsePasted(text).length) toast('bad', 'ไม่พบรายการในไฟล์ · No rows found', 'กรอกในชีตแรก (รายการ) เริ่มแถวที่ 2 · Fill in the first sheet from row 2');
+    } catch (e: any) {
+      toast('bad', 'อ่านไฟล์ไม่สำเร็จ · Could not read the file', e?.message || '');
+    }
+  }
+  const dropProps = {
+    onDragOver: (e: React.DragEvent) => {
+      if (!Array.from(e.dataTransfer.types).includes('Files')) return;
+      e.preventDefault();
+      setDragging(true);
+    },
+    onDragLeave: (e: React.DragEvent) => {
+      if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragging(false);
+    },
+    onDrop: (e: React.DragEvent) => {
+      const f = e.dataTransfer.files?.[0];
+      if (!f) return;
+      e.preventDefault();
+      setDragging(false);
+      takeItemFile(f);
+    },
+  };
   const removeItem = (i: number) =>
     setD((x) => (x && x.items.length > 1 ? { ...x, items: x.items.filter((_, j) => j !== i), comps: x.comps.map((c) => ({ ...c, prices: c.prices.filter((_, j) => j !== i), discounts: c.discounts.filter((_, j) => j !== i) })) } : x));
   const setPrice = (ci: number, k: number, v: string, field: 'prices' | 'discounts' = 'prices') =>
@@ -726,10 +758,13 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
           </div>
         )}
 
+        <div className={`items-drop${dragging ? ' on' : ''}`} {...dropProps}>
+        {dragging && <div className="drop-hint" aria-hidden="true">วางไฟล์ Excel ที่นี่เพื่อเพิ่มรายการ · Drop the Excel form here</div>}
         <div className="actions">
           <h2 style={{ margin: 0 }}>รายการสินค้า · Items <span className="chip st-draft">{n} รายการ</span></h2>
           <div className="row" style={{ gap: 8 }}>
-            <button type="button" className="btn sm" onClick={() => { setPasteText(''); setModal('paste'); }}>วางหลายรายการจาก Excel · Paste from Excel</button>
+            <button type="button" className="btn sm" id="items-form" onClick={() => downloadItemForm()} title="ดาวน์โหลดฟอร์ม Excel ไปกรอก แล้วลากไฟล์กลับมาวางที่นี่ · Download the form, fill it in, drop it back here">⬇ ฟอร์ม Excel · Form</button>
+            <button type="button" className="btn sm" onClick={() => { setPasteText(''); setPasteFile(''); setModal('paste'); }}>วางหลายรายการจาก Excel · Paste from Excel</button>
             <button type="button" className="btn sm p" disabled={n >= MAX_ITEMS} onClick={() => addItems([blankItem()])}>+ เพิ่มรายการ · Add item</button>
           </div>
         </div>
@@ -821,6 +856,8 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
             );
           })}
         </ol>
+        <span className="note">มีหลายรายการ? กด “ฟอร์ม Excel” ไปกรอก แล้วลากไฟล์มาวางในส่วนนี้ · Many items? Download the form, fill it in and drop the file here.</span>
+        </div>
         <div className="actions">
           <span className="note">สูงสุด {MAX_ITEMS} รายการต่อคำขอ · up to {MAX_ITEMS} items; วางตัวเลขหลายบรรทัดลงช่องราคาเพื่อเติมลงด้านล่าง · paste a column of prices to fill down</span>
           <button type="button" className="btn sm p" disabled={n >= MAX_ITEMS} onClick={() => addItems([blankItem()])}>+ เพิ่มรายการ · Add item</button>
@@ -1120,9 +1157,21 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
 
       {modal === 'paste' && (
         <Modal title="วางหลายรายการจาก Excel · Paste items from Excel" onClose={() => setModal(null)} wide>
-          <p style={{ margin: 0 }}>คัดลอกแถวจาก Excel แล้ววางด้านล่าง 1 แถว = 1 รายการ เรียงคอลัมน์ดังนี้ · Copy rows from Excel, one row per item, columns in this order:</p>
+          <div className="row" style={{ gap: 10, alignItems: 'stretch', flexWrap: 'wrap' }}>
+            <div className="box" style={{ flex: '1 1 220px', display: 'grid', gap: 6, alignContent: 'start' }}>
+              <b>1 · ดาวน์โหลดฟอร์มไปกรอก</b>
+              <span className="note">1 แถว = 1 รายการ · มีชีต “วิธีกรอก” และตัวอย่างในไฟล์</span>
+              <button type="button" className="btn sm" style={{ justifySelf: 'start' }} onClick={() => downloadItemForm()}>⬇ ดาวน์โหลดฟอร์ม Excel · Form</button>
+            </div>
+            <label className={`box file-drop${dragging ? ' on' : ''}`} htmlFor="items-file" style={{ flex: '2 1 260px', cursor: 'pointer', display: 'grid', gap: 6, alignContent: 'center', textAlign: 'center' }} {...dropProps}>
+              <b>2 · ลากไฟล์ที่กรอกแล้วมาวางที่นี่ หรือคลิกเพื่อเลือกไฟล์</b>
+              <span className="note">{pasteFile ? `ไฟล์: ${pasteFile}` : 'ไฟล์ .xlsx · Drop or choose the filled-in form'}</span>
+              <input type="file" id="items-file" accept=".xlsx" className="sr" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) takeItemFile(f); }} />
+            </label>
+          </div>
+          <p style={{ margin: 0 }}>หรือคัดลอกแถวจาก Excel แล้ววางด้านล่าง 1 แถว = 1 รายการ เรียงคอลัมน์ดังนี้ · Or copy rows from Excel, one row per item, columns in this order:</p>
           <div className="box mono" style={{ fontSize: 13 }}>SKU ⇥ จำนวน ⇥ ราคาต่อหน่วยก่อน VAT ⇥ ส่วนลด (5% / 100 / ว่าง) ⇥ ราคาก่อนหน้า ⇥ คำต่อท้าย</div>
-          <textarea className="in mono" aria-label="ข้อมูลที่วาง · Pasted rows" style={{ minHeight: 180 }} value={pasteText} onChange={(e) => setPasteText(e.target.value)} placeholder={'AC-INV-18000\t6\t29050\t5%\t28500\tติดตั้งห้องประชุม'} />
+          <textarea className="in mono" id="paste-text" aria-label="ข้อมูลที่วาง · Pasted rows" style={{ minHeight: 160 }} value={pasteText} onChange={(e) => setPasteText(e.target.value)} placeholder={'AC-INV-18000\t6\t29050\t5%\t28500\tติดตั้งห้องประชุม'} />
           <span className="note">พบ {parsePasted(pasteText).length} รายการ · rows found{n + parsePasted(pasteText).length > MAX_ITEMS ? ` (เกิน ${MAX_ITEMS} รายการ จะเพิ่มเท่าที่ได้)` : ''}</span>
           <div className="row" style={{ gap: 10, justifyContent: 'flex-end' }}>
             <button className="btn" onClick={() => setModal(null)}>ยกเลิก · Cancel</button>

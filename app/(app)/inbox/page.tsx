@@ -2,6 +2,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useApp } from '@/components/AppProvider';
+import { PdfButton } from '@/components/PdfButton';
 import { LIST_COLS, Loading, PageHead, ReqTable } from '@/components/ui';
 import { SUBJ, dt, fmt } from '@/lib/format';
 import type { RequestRow } from '@/lib/types';
@@ -66,7 +67,7 @@ export default function Inbox() {
         <div className="card"><p className="lead" style={{ margin: 0 }}>ไม่มีคำขอรอคุณตอนนี้ · Nothing waiting for you right now</p></div>
       )}
       <h2>ตัดสินใจล่าสุด · Recent decisions</h2>
-      <ReqTable list={done} empty="ยังไม่มี · None yet" />
+      <ReqTable list={done} empty="ยังไม่มี · None yet" actions={(r) => <PdfButton r={r} />} />
     </>
   );
 }

@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useApp } from '@/components/AppProvider';
+import { PdfButton } from '@/components/PdfButton';
 import { LIST_COLS, Loading, PageHead, ReqTable } from '@/components/ui';
 import { ST } from '@/lib/format';
 import { exportHistory } from '@/lib/exportHistory';
@@ -87,7 +88,7 @@ export default function History() {
           <label className="f" htmlFor="h-to">ถึงวันที่ · To<input className="in" type="date" id="h-to" value={to} onChange={(e) => { setTo(e.target.value); setPage(0); }} /></label>
         </div>
       </div>
-      {rows === null ? <Loading /> : <ReqTable list={rows} empty="ไม่พบคำขอที่ตรงกับการค้นหา · No matching requests" />}
+      {rows === null ? <Loading /> : <ReqTable list={rows} empty="ไม่พบคำขอที่ตรงกับการค้นหา · No matching requests" actions={(r) => <PdfButton r={r} />} />}
       {total > PAGE && (
         <div className="pager">
           <span className="note">{page * PAGE + 1}–{Math.min(total, (page + 1) * PAGE)} จาก {total}</span>

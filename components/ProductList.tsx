@@ -45,6 +45,8 @@ export function ProductList({ canEdit }: { canEdit: boolean }) {
   const [pv, setPv] = useState<Preview | null>(null);
   const [busy, setBusy] = useState(false);
   const [adding, setAdding] = useState<Product | null>(null);
+  const [clearing, setClearing] = useState<number | null>(null);
+  const [clearBusy, setClearBusy] = useState('');
 
   useEffect(() => {
     const t = setTimeout(async () => {
@@ -139,6 +141,48 @@ export function ProductList({ canEdit }: { canEdit: boolean }) {
     ]).toFile('sku-template.xlsx');
   }
 
+  /** every SKU in the system (pages of 1,000) */
+  async function allProducts() {
+    const out: Product[] = [];
+    for (let from = 0; from < 50000; from += 1000) {
+      const { data } = await sb.from('products').select('*').order('sku').range(from, from + 999);
+      const rows = (data as Product[]) || [];
+      out.push(...rows);
+      if (rows.length < 1000) break;
+    }
+    return out;
+  }
+  async function askClear() {
+    const { count } = await sb.from('products').select('sku', { count: 'exact', head: true });
+    setClearing(count || 0);
+  }
+  async function backup() {
+    setClearBusy('กำลังเตรียมไฟล์… · Preparing…');
+    try {
+      const list = await allProducts();
+      const { default: writeExcelFile } = await import('write-excel-file/browser');
+      const d = new Date();
+      const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+      await writeExcelFile([
+        ['SKU', 'ชื่อสินค้า', 'หมวด', 'หน่วย', 'สถานะ'],
+        ...list.map((x) => [x.sku, x.name, x.category, x.unit, x.active ? 'ใช้งาน' : 'ปิดใช้งาน']),
+      ]).toFile(`sku-backup-${stamp}.xlsx`);
+    } finally {
+      setClearBusy('');
+    }
+  }
+  async function clearAll() {
+    setClearBusy('กำลังลบ… · Clearing…');
+    const { ok, data } = await run<number>('clear-products', sb.rpc('admin_clear_products', { p_confirm: 'ลบทั้งหมด' }));
+    setClearBusy('');
+    if (ok) {
+      setClearing(null);
+      setPv(null);
+      toast('ok', 'ลบ SKU ทั้งหมดแล้ว · All SKUs cleared', `ลบ ${(data ?? 0).toLocaleString('en-US')} รายการ · อัปโหลดไฟล์ใหม่ได้เลย`);
+      refresh();
+    }
+  }
+
   async function toggle(p: Product) {
     const { ok } = await run('toggle-product', sb.from('products').update({ active: !p.active, updated_at: new Date().toISOString() }).eq('sku', p.sku));
     if (ok) setRows((list) => (list || []).map((x) => (x.sku === p.sku ? { ...x, active: !p.active } : x)));
@@ -172,7 +216,10 @@ export function ProductList({ canEdit }: { canEdit: boolean }) {
         <div className="tile"><span>ใช้งาน · Active</span><b>{active}</b></div>
       </div>
       {canEdit && <div className="card">
-        <h2>นำเข้าจาก Excel · Import from Excel</h2>
+        <div className="actions">
+          <h2>นำเข้าจาก Excel · Import from Excel</h2>
+          <button className="btn d sm" id="sku-clear" onClick={askClear} title="ลบ SKU ทุกรายการในระบบ แล้วอัปโหลดไฟล์ใหม่ · Remove every SKU, then upload a new file">🗑 ลบ SKU ทั้งหมด · Clear all</button>
+        </div>
         <label className="box" htmlFor="sku-file" style={{ textAlign: 'center', cursor: 'pointer', display: 'block' }}>
           <b>เลือกไฟล์ .xlsx / .csv · Choose file</b>
           <div className="note">คอลัมน์ · Columns: SKU, ชื่อสินค้า (Name) · ไม่บังคับ · optional: หมวด (Category), หน่วย (Unit) · สูงสุด 20,000 แถวต่อไฟล์</div>
@@ -247,6 +294,24 @@ export function ProductList({ canEdit }: { canEdit: boolean }) {
           </div>
         )}
       </div>
+
+      {canEdit && clearing !== null && (
+        <Modal title="ลบ SKU ทั้งหมด · Clear all SKUs" onClose={() => !clearBusy && setClearing(null)}>
+          <p style={{ margin: 0 }}>ลบสินค้า<b> ทั้งหมด {clearing.toLocaleString('en-US')} รายการ </b>ออกจากระบบ แล้วอัปโหลดไฟล์ใหม่ในช่อง “นำเข้าจาก Excel”</p>
+          <ul className="note" style={{ margin: 0, paddingLeft: 18 }}>
+            <li>คำขอที่ส่งแล้ว ไม่กระทบ (คำขอเก็บ SKU ชื่อสินค้า และหน่วยไว้แล้ว)</li>
+            <li>ฉบับร่างที่ยังไม่ส่ง จะส่งได้เมื่อ SKU นั้นถูกอัปโหลดกลับเข้ามา</li>
+            <li>กู้คืนไม่ได้ — ดาวน์โหลดไฟล์สำรองไว้ก่อนได้</li>
+          </ul>
+          <div className="actions">
+            <button className="btn sm" onClick={backup} disabled={!!clearBusy || !clearing}>ดาวน์โหลดสำรอง (.xlsx) · Backup</button>
+            <span className="row" style={{ gap: 10 }}>
+              <button className="btn" onClick={() => setClearing(null)} disabled={!!clearBusy}>ยกเลิก · Cancel</button>
+              <button className="btn d" id="sku-clear-go" onClick={clearAll} disabled={!!clearBusy || !clearing}>{clearBusy || `ลบทั้งหมด ${clearing.toLocaleString('en-US')} รายการ · Clear`}</button>
+            </span>
+          </div>
+        </Modal>
+      )}
 
       {canEdit && adding && (
         <Modal title="สินค้า · Product" onClose={() => setAdding(null)}>

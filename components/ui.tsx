@@ -133,4 +133,4 @@ export function PageHead({ title, lead, children }: { title: React.ReactNode; le
 
 /** Columns used by every request list (no signature images). */
 export const LIST_COLS =
-  'id,no,status,preparer_id,created_by,subject_type,sku,product_name,total,vendor,bought_vendors,dept,created_at,submitted_at,current_step,step_since,completed_at,buyer_id,request_steps(step_no,position,approver_id,status,signer_id,on_behalf_of)';
+  'id,no,status,preparer_id,created_by,subject_type,sku,product_name,total,vendor,bought_vendors,dept,created_at,submitted_at,current_step,step_since,completed_at,buyer_id,letter_path,request_steps(step_no,position,approver_id,status,signer_id,on_behalf_of)';

@@ -34,9 +34,9 @@ export interface Settings {
   recipient: string;
   request_prefix: string;
 }
-export interface Position { code: string; th: string; en: string; sort: number; note?: string; sign_mode?: 'online' | 'wet' }
+export interface Position { code: string; th: string; en: string; sort: number; note?: string; sign_mode?: 'online' | 'wet'; wet_name?: string }
 /** One approver position on the comparison sheet, saved when the request is sent. */
-export interface SignPlanEntry { position: string; mode: 'online' | 'wet' | 'skip'; step_no?: number; approver_id?: string | null }
+export interface SignPlanEntry { position: string; mode: 'online' | 'wet' | 'skip'; step_no?: number; approver_id?: string | null; /** wet: name set for the position when sent (0016) */ name?: string | null }
 export interface Tier { id: number; label: string; max_amount: number | null; steps: string[]; sort: number }
 export interface Department { id: string; th: string; en: string; sort: number; active: boolean }
 export interface Company {

@@ -72,7 +72,12 @@ function Positions() {
     }
     const dup = dupCode(rows.map((p) => p.code));
     if (dup) return toast('bad', `รหัสตำแหน่ง “${dup}” ซ้ำกัน · Duplicate code`, 'แก้รหัสของแถวที่เพิ่มใหม่ให้ไม่ซ้ำกับตำแหน่งที่มีอยู่ แล้วกดบันทึกอีกครั้ง · Give the new row a different code');
-    const { ok } = await run('save-positions', sb.from('positions').upsert(rows.map(({ code, th, en, sort, note, sign_mode }) => ({ code, th: th.trim(), en: en.trim(), sort: Number(sort) || 0, note: (note || '').trim(), sign_mode: sign_mode || 'online' }))));
+    // wet_name exists once SQL 0016 has been run
+    const hasWet = positions.some((p) => 'wet_name' in p);
+    const { ok } = await run('save-positions', sb.from('positions').upsert(rows.map(({ code, th, en, sort, note, sign_mode, wet_name }) => ({
+      code, th: th.trim(), en: en.trim(), sort: Number(sort) || 0, note: (note || '').trim(), sign_mode: sign_mode || 'online',
+      ...(hasWet ? { wet_name: (wet_name || '').trim() } : {}),
+    }))));
     if (ok) { toast('ok', 'บันทึกตำแหน่งแล้ว · Positions saved', ''); reloadRefs(); }
   }
   /** ช่วงวงเงิน of each position = the tiers whose approval ends at that position */
@@ -108,7 +113,7 @@ function Positions() {
         </div>
       </div>
       <span className="note">ลำดับการอนุมัติเรียงตาม “ลำดับ” น้อยไปมาก · Approvals happen in ascending order. ผู้อนุมัติในฝ่ายเดียวกับคำขอจะถูกเลือกก่อน · An approver from the request&apos;s department is chosen first.</span>
-      <span className="note">ตารางเปรียบเทียบแสดงกรอบ “ผู้อนุมัติ (1), (2), …” ทุกตำแหน่งตามลำดับนี้ · ตำแหน่งที่วงเงินไม่ถึงจะถูกขีดฆ่าเมื่ออนุมัติครบ · ตำแหน่ง “ลายเซ็นสด” ไม่ต้องอนุมัติในระบบ (การอนุมัติออนไลน์จบที่ตำแหน่งก่อนหน้า) และเว้นกรอบไว้ให้เซ็นบนกระดาษที่พิมพ์ · Every position gets a signature box; unused ones are crossed out; hand-signed positions sign the printout.</span>
+      <span className="note">ตารางเปรียบเทียบแสดงกรอบ “ผู้อนุมัติ (1), (2), …” ทุกตำแหน่งตามลำดับนี้ · ตำแหน่งที่วงเงินไม่ถึงจะถูกขีดฆ่าเมื่ออนุมัติครบ · ตำแหน่ง “ลายเซ็นสด” ไม่ต้องอนุมัติในระบบ (การอนุมัติออนไลน์จบที่ตำแหน่งก่อนหน้า) และเว้นกรอบไว้ให้เซ็นบนกระดาษที่พิมพ์ — ใส่ “ชื่อผู้ลงนาม” เพื่อพิมพ์ชื่อใต้กรอบ · Every position gets a signature box; unused ones are crossed out; hand-signed positions sign the printout.</span>
       {rows.map((p, i) => (
         <div key={i} className="row" style={{ gap: 10, alignItems: 'flex-end', border: '1px solid var(--beige)', borderRadius: 10, padding: 10 }}>
           <label className="f" style={{ flex: '1 1 110px' }}>รหัส · Code<input className="in mono" value={p.code} disabled={!p.isNew} onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, code: e.target.value.toLowerCase() } : x)))} /></label>
@@ -121,6 +126,12 @@ function Positions() {
               <option value="wet">ลายเซ็นสด (เซ็นบนกระดาษ)</option>
             </select>
           </label>
+          {p.sign_mode === 'wet' && (
+            <label className="f" style={{ flex: '3 1 220px' }}>ชื่อผู้ลงนาม (ลายเซ็นสด)
+              <input className="in wet-name" value={p.wet_name || ''} maxLength={100} placeholder="เว้นว่าง = ใช้ชื่อผู้อนุมัติของตำแหน่งนี้"
+                onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, wet_name: e.target.value } : x)))} />
+            </label>
+          )}
           <label className="f" style={{ flex: '1 1 80px' }}>ลำดับ<input className="in r" inputMode="numeric" value={p.sort} onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, sort: Number(e.target.value) || 0 } : x)))} /></label>
           {p.isNew ? <button className="icon-btn" onClick={() => setRows(rows.filter((_, j) => j !== i))} aria-label="ลบ">✕</button>
             : <button className="btn sm d" onClick={() => remove(p.code)} title="ลบได้เมื่อไม่มีผู้ใช้หรือคำขอใช้ตำแหน่งนี้">ลบ</button>}
