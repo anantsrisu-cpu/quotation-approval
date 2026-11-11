@@ -43,7 +43,7 @@ export interface Company {
   id: string; th: string; en: string; initials: string; address: string;
   logo_path: string | null; sort: number; active: boolean;
 }
-export interface Product { sku: string; name: string; category: string; unit: string; active: boolean; updated_at?: string }
+export interface Product { /** buyer company whose list this SKU is in (0017) */ company_id: string; sku: string; name: string; category: string; unit: string; active: boolean; updated_at?: string }
 
 export interface LineItem {
   sku: string;

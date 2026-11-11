@@ -291,23 +291,26 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
     setD((x) => (x ? { ...x, comps: x.comps.map((c, j) => (j === ci ? { ...c, ...patch } : c)) } : x));
 
   // look up every SKU on the form (one query for all unknown codes)
+  // (0017) each buyer company has its own SKU list: the cache is per company
   const skuList = (d?.items || []).map((it) => skuKey(it.sku)).filter(Boolean).join('|');
+  const coId = d?.company_id || '';
   useEffect(() => {
-    const keys = Array.from(new Set(skuList.split('|').filter(Boolean))).filter((k) => !(k in prods));
+    if (!coId) return;
+    const keys = Array.from(new Set(skuList.split('|').filter(Boolean))).filter((k) => !(`${coId}|${k}` in prods));
     if (!keys.length) return;
     const t = setTimeout(async () => {
-      const { data } = await sb.from('products').select('*').in('sku', keys).eq('active', true);
+      const { data } = await sb.from('products').select('*').eq('company_id', coId).in('sku', keys).eq('active', true);
       const found = new Map(((data as Product[]) || []).map((p) => [p.sku, p]));
       setProds((m) => {
         const n = { ...m };
-        keys.forEach((k) => (n[k] = found.get(k) || null));
+        keys.forEach((k) => (n[`${coId}|${k}`] = found.get(k) || null));
         return n;
       });
       // take the product's unit for lines that were just looked up
       setD((x) => (x ? { ...x, items: x.items.map((it) => { const p = found.get(skuKey(it.sku)); return p?.unit && keys.includes(skuKey(it.sku)) ? { ...it, unit: p.unit } : it; }) } : x));
     }, 300);
     return () => clearTimeout(t);
-  }, [skuList, sb]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [skuList, coId, sb]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // suggestions for the SKU being typed (code or product name)
   const activeSku = d?.items[active]?.sku.trim() || '';
@@ -318,11 +321,12 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
     }
     const t = setTimeout(async () => {
       const q = activeSku.replace(/[%,()]/g, '');
-      const { data } = await sb.from('products').select('*').eq('active', true).or(`sku.ilike.%${q.toUpperCase()}%,name.ilike.%${q}%`).limit(8);
+      if (!coId) return setSuggest([]);
+      const { data } = await sb.from('products').select('*').eq('company_id', coId).eq('active', true).or(`sku.ilike.%${q.toUpperCase()}%,name.ilike.%${q}%`).limit(8);
       setSuggest(((data as Product[]) || []).filter((x) => x.sku !== skuKey(activeSku)));
     }, 250);
     return () => clearTimeout(t);
-  }, [activeSku, sb]);
+  }, [activeSku, coId, sb]);
 
   const c = useMemo(() => calcItems(d?.items || [], vatRate, d?.comps || [], !!d?.no_comp, !!d?.multi_vendor), [d?.items, d?.comps, vatRate, d?.no_comp, d?.multi_vendor]);
   // how many other requests already use this เลขที่ใบขอซื้อ (allowed, just shown as a note)
@@ -356,7 +360,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
 
   if (!d || !me) return <Loading rows={5} />;
 
-  const prodOf = (it: DraftItem) => prods[skuKey(it.sku)];
+  const prodOf = (it: DraftItem) => prods[`${d.company_id}|${skuKey(it.sku)}`];
   const nameOf = (it: DraftItem) => prodOf(it)?.name || '';
   const n = d.items.length;
   const firstName = nameOf(d.items[0]) || '[ชื่อสินค้า]';
@@ -825,11 +829,12 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
                   </div>
                   <div className="item-info" aria-live="polite">
                     {!key ? <span className="note">กรอก SKU แล้วชื่อสินค้าจะขึ้นมาเอง · Enter a SKU</span>
+                      : !d.company_id ? <span className="note">เลือกบริษัทผู้ซื้อก่อน ระบบจะค้นหา SKU ในรายการของบริษัทนั้น · Choose the buyer company first</span>
                       : p === undefined ? <span className="note">กำลังค้นหา… · Looking up…</span>
                       : p ? <span style={{ color: 'var(--sage-ink)' }}><b>✓ {p.name}</b> <span className="note">· {p.category || '—'}</span></span>
                       : (
                         <span style={{ color: 'var(--bad)' }}>
-                          ไม่พบ SKU นี้ · SKU not found
+                          ไม่พบ SKU นี้ในรายการสินค้าของ {companies.find((x) => x.id === d.company_id)?.th || 'บริษัทที่เลือก'} · SKU not found for this company
                           {active === i && suggest.slice(0, 4).map((sp) => (
                             <button key={sp.sku} type="button" className="btn sm" style={{ marginLeft: 6 }} onClick={() => setItem(i, { sku: sp.sku })}>{sp.sku} · {sp.name}</button>
                           ))}

@@ -19,14 +19,23 @@ function NavLink({ href, th, en, count, exact }: { href: string; th: string; en:
 }
 
 function Bell() {
-  const { notifs, unread, markRead } = useApp();
+  const { notifs, unread, markRead, clearNotifs, toast } = useApp();
   const [open, setOpen] = useState(false);
+  const [ask, setAsk] = useState(false);
+  const [clearing, setClearing] = useState(false);
+  async function clear() {
+    setClearing(true);
+    const n = await clearNotifs();
+    setClearing(false);
+    setAsk(false);
+    if (n !== null) toast('ok', 'ลบการแจ้งเตือนแล้ว · Notifications cleared', `${n} รายการ`);
+  }
   const router = useRouter();
   const top = notifs.slice(0, 8);
   const g = (k: string) => (k === 'ok' ? 'ok' : k === 'bad' ? 'bad' : 'wait');
   return (
     <>
-      <button className="bell" onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-label={`การแจ้งเตือน ${unread} รายการใหม่ · Notifications, ${unread} new`}>
+      <button className="bell" onClick={() => { setOpen((o) => !o); setAsk(false); }} aria-expanded={open} aria-label={`การแจ้งเตือน ${unread} รายการใหม่ · Notifications, ${unread} new`}>
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15z" />
           <path d="M10 20a2 2 0 0 0 4 0" />
@@ -37,10 +46,22 @@ function Bell() {
         <>
           <button className="pop-scrim" onClick={() => setOpen(false)} aria-label="ปิดการแจ้งเตือน · Close notifications" />
           <div className="pop" role="dialog" aria-label="การแจ้งเตือน · Notifications">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '14px 16px' }}>
-              <b style={{ flex: 1, fontSize: 16 }}>การแจ้งเตือน · Notifications</b>
-              <button className="btn sm" onClick={() => markRead()}>อ่านทั้งหมด · Mark read</button>
+            <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, padding: '14px 16px' }}>
+              <b style={{ flex: '1 1 auto', fontSize: 16 }}>การแจ้งเตือน · Notifications</b>
+              <span className="row" style={{ gap: 6, flexWrap: 'nowrap' }}>
+                <button className="btn sm" onClick={() => markRead()} disabled={!unread} title="Mark all read">อ่านทั้งหมด</button>
+                <button className="btn sm d" id="notif-clear" onClick={() => setAsk(true)} disabled={!notifs.length || ask} title="Clear all">🗑 ลบทั้งหมด</button>
+              </span>
             </div>
+            {ask && (
+              <div className="clear-ask" role="alert">
+                <span>ลบการแจ้งเตือน<b>ทั้งหมด</b>ของคุณ? (คำขอไม่ถูกลบ · กู้คืนไม่ได้)</span>
+                <span className="row" style={{ gap: 8 }}>
+                  <button className="btn sm" onClick={() => setAsk(false)} disabled={clearing}>ยกเลิก</button>
+                  <button className="btn sm d" id="notif-clear-go" onClick={clear} disabled={clearing}>{clearing ? 'กำลังลบ…' : 'ลบทั้งหมด'}</button>
+                </span>
+              </div>
+            )}
             {top.length ? (
               top.map((n) => (
                 <button

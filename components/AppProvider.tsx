@@ -40,6 +40,8 @@ interface AppCtx {
   company: (id?: string | null) => Company | null;
   logoUrl: (c: Company | null) => string | null;
   markRead: (ids?: number[]) => Promise<void>;
+  /** delete every notification of the signed-in user; returns how many (null = failed) */
+  clearNotifs: () => Promise<number | null>;
   /** Run a Supabase call; on failure show a toast and log it to the admin bug list. */
   run: <T = any>(action: string, op: PromiseLike<{ data: any; error: any }>) => Promise<{ ok: boolean; data: T | null }>;
 }
@@ -218,6 +220,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [sb, uid],
   );
 
+  const clearNotifs = useCallback(async () => {
+    const { ok, data } = await run<number>('clear-notifications', sb.rpc('clear_my_notifications'));
+    if (!ok) return null;
+    setNotifs([]);
+    setBump((b) => b + 1);
+    return data ?? 0;
+  }, [sb, run]);
+
   const value = useMemo<AppCtx>(() => {
     const has = (r: Role) => !!me && me.status === 'active' && me.roles.includes(r);
     return {
@@ -226,14 +236,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       unread: notifs.filter((n) => !n.read_at).length,
       waitingCount, bump,
       refresh: () => setBump((b) => b + 1),
-      reloadRefs, reloadMe, toast, has, run, markRead,
+      reloadRefs, reloadMe, toast, has, run, markRead, clearNotifs,
       name: (id) => (id && people[id] ? people[id].name || people[id].email : '—'),
       deptTh: (id) => departments.find((d) => d.id === id)?.th || id || '—',
       posTh: (code) => positions.find((p) => p.code === code)?.th || code || '—',
       company: (id) => companies.find((c) => c.id === id) || companies[0] || null,
       logoUrl: (c) => (c?.logo_path ? sb.storage.from('logos').getPublicUrl(c.logo_path).data.publicUrl : null),
     };
-  }, [sb, uid, me, ready, settings, positions, tiers, departments, companies, places, people, notifs, unitRows, waitingCount, bump, reloadRefs, reloadMe, toast, run, markRead]);
+  }, [sb, uid, me, ready, settings, positions, tiers, departments, companies, places, people, notifs, unitRows, waitingCount, bump, reloadRefs, reloadMe, toast, run, markRead, clearNotifs]);
 
   return (
     <Ctx.Provider value={value}>
