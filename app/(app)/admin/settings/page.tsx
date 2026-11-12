@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useApp } from '@/components/AppProvider';
 import { AdminGate } from '@/components/AdminGate';
 import { PageHead } from '@/components/ui';
@@ -257,7 +257,17 @@ function Departments() {
   const [rows, setRows] = useState<(Department & { isNew?: boolean })[]>([]);
   const [pv, setPv] = useState<DeptImport | null>(null);
   const [busy, setBusy] = useState(false);
+  const [delId, setDelId] = useState<string | null>(null);
   useEffect(() => setRows(departments.map((d) => ({ ...d }))), [departments]);
+
+  /** remove a department nobody uses (the database refuses one that has requests or accounts) */
+  async function remove(d: Department) {
+    setBusy(true);
+    const { ok } = await run('delete-department', sb.rpc('admin_delete_department', { p_id: d.id }));
+    setBusy(false);
+    setDelId(null);
+    if (ok) { toast('ok', 'ลบฝ่ายแล้ว · Department deleted', d.th); reloadRefs(); }
+  }
 
   /** Excel with the current departments, ready to edit and upload back */
   async function template() {
@@ -349,7 +359,7 @@ function Departments() {
           <button className="btn p sm" onClick={save}>บันทึก · Save</button>
         </div>
       </div>
-      <span className="note">แสดงเป็น “ฝ่ายที่ขอซื้อ” ในหัวตารางเปรียบเทียบ · Shown on the comparison sheet header. ปิดใช้งานแทนการลบ · Deactivate instead of deleting. · เพิ่มหลายฝ่ายพร้อมกัน: ดาวน์โหลด Template (มีฝ่ายปัจจุบันอยู่แล้ว) แก้หรือเพิ่มแถว แล้วกด “นำเข้าจาก Excel” — รหัสที่มีอยู่แล้วจะถูกแก้ไข รหัสใหม่จะถูกเพิ่ม · เว้นรหัสว่างได้ ระบบตั้งรหัสให้</span>
+      <span className="note">แสดงเป็น “ฝ่ายที่ขอซื้อ” ในหัวตารางเปรียบเทียบ · Shown on the comparison sheet header. ฝ่ายที่ไม่มีการใช้งานกด “ลบ” ได้ · ฝ่ายที่มีคำขอหรือมีผู้ใช้สังกัดอยู่ลบไม่ได้ ให้ปิด “ใช้งาน” แทน · Unused departments can be deleted; ones in use can only be deactivated. · เพิ่มหลายฝ่ายพร้อมกัน: ดาวน์โหลด Template (มีฝ่ายปัจจุบันอยู่แล้ว) แก้หรือเพิ่มแถว แล้วกด “นำเข้าจาก Excel” — รหัสที่มีอยู่แล้วจะถูกแก้ไข รหัสใหม่จะถูกเพิ่ม · เว้นรหัสว่างได้ ระบบตั้งรหัสให้</span>
       {pv && (
         <div className="imp-pv" role="status">
           <b>{pv.file}</b>: เพิ่มใหม่ <b>{pv.add.length}</b> · แก้ไข <b>{pv.upd.length}</b> · เหมือนเดิม {pv.same}{pv.errs.length ? <> · <span style={{ color: 'var(--bad)' }}>ข้าม {pv.errs.length} แถว</span></> : null}
@@ -369,6 +379,16 @@ function Departments() {
           <label className="f" style={{ flex: '3 1 180px' }}>ชื่อ (อังกฤษ)<input className="in" value={d.en} onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, en: e.target.value } : x)))} /></label>
           <label className="f" style={{ flex: '1 1 70px' }}>ลำดับ<input className="in r" value={d.sort} onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, sort: Number(e.target.value) || 0 } : x)))} /></label>
           <label className="check"><input type="checkbox" checked={d.active} onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, active: e.target.checked } : x)))} />ใช้งาน</label>
+          {d.isNew ? (
+            <button className="btn sm d dept-del" onClick={() => setRows(rows.filter((_, j) => j !== i))}>ลบ</button>
+          ) : delId === d.id ? (
+            <span className="row" style={{ gap: 6 }}>
+              <button className="btn sm d dept-del-go" disabled={busy} onClick={() => remove(d)}>ยืนยันลบ</button>
+              <button className="btn sm" disabled={busy} onClick={() => setDelId(null)}>ยกเลิก</button>
+            </span>
+          ) : (
+            <button className="btn sm d dept-del" onClick={() => setDelId(d.id)} title="ลบฝ่ายที่ไม่มีการใช้งาน · Delete an unused department">ลบ</button>
+          )}
         </div>
       ))}
     </Section>
@@ -445,6 +465,97 @@ function Companies() {
     </Section>
   );
 }
+
+interface OutRow { id: number; to_emails: string[]; subject: string; status: string; error: string; created_at: string }
+
+/** System switch, test and queue of notification e-mails (sent by the Edge Function send-emails through Microsoft 365). */
+function EmailNotify() {
+  const { sb, settings, run, toast, reloadRefs, me } = useApp();
+  const [counts, setCounts] = useState<Record<string, number> | null>(null);
+  const [fails, setFails] = useState<OutRow[]>([]);
+  const [busy, setBusy] = useState('');
+  const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
+  const ready = !!settings && 'email_enabled' in settings; // SQL 0018 has been run
+  const on = !!settings?.email_enabled;
+
+  const load = useCallback(async () => {
+    if (!ready) return;
+    const c: Record<string, number> = {};
+    await Promise.all(['pending', 'sending', 'sent', 'failed'].map(async (st) => {
+      const { count } = await sb.from('email_outbox').select('id', { count: 'exact', head: true }).eq('status', st);
+      c[st] = count || 0;
+    }));
+    const { data } = await sb.from('email_outbox').select('id,to_emails,subject,status,error,created_at').neq('error', '').order('id', { ascending: false }).limit(5);
+    setCounts(c);
+    setFails((data as OutRow[]) || []);
+  }, [sb, ready]);
+  useEffect(() => { load(); }, [load]);
+
+  async function toggle(v: boolean) {
+    const { ok } = await run('save-email-switch', sb.from('app_settings').update({ email_enabled: v, updated_at: new Date().toISOString() }).eq('id', 1));
+    if (ok) { toast('ok', v ? 'เปิดการส่งอีเมลแล้ว · E-mail on' : 'ปิดการส่งอีเมลแล้ว · E-mail off', v ? 'การแจ้งเตือนใหม่จะถูกส่งเข้าอีเมลด้วย' : 'การแจ้งเตือนในระบบยังทำงานตามปกติ'); reloadRefs(); }
+  }
+  /** runs the sender now and shows what it answered (missing secrets, Microsoft errors, …) */
+  async function send(label: string) {
+    const { data, error } = await sb.functions.invoke('send-emails', { body: {} });
+    let body: any = data;
+    if (error) {
+      try { body = await (error as any).context?.json(); } catch { body = null; }
+    }
+    const text = body?.error
+      ? String(body.error)
+      : error
+        ? `เรียกตัวส่งอีเมลไม่ได้ — ยังไม่ได้ติดตั้ง Edge Function “send-emails”? (${error.message})`
+        : `${label}: ส่งสำเร็จ ${body?.sent ?? 0} ฉบับ${body?.errors ? ` · ไม่สำเร็จ ${body.errors}` : ''}`;
+    setResult({ ok: !error && !body?.error, text });
+    await load();
+  }
+  async function test() {
+    setBusy('test'); setResult(null);
+    const { ok, data } = await run<string[]>('test-email', sb.rpc('admin_test_email'));
+    if (ok) await send(`ส่งอีเมลทดสอบถึง ${(data || []).join(', ')}`);
+    setBusy('');
+  }
+  async function retry() {
+    setBusy('retry'); setResult(null);
+    const { ok } = await run<number>('retry-emails', sb.rpc('admin_retry_emails'));
+    if (ok) await send('ลองส่งใหม่');
+    setBusy('');
+  }
+
+  return (
+    <Section className="card">
+      <div className="actions">
+        <h2>อีเมลแจ้งเตือน · E-mail notifications {ready && <span className={`chip ${on ? 'st-ok' : 'st-draft'}`}>{on ? 'เปิดอยู่ · On' : 'ปิดอยู่ · Off'}</span>}</h2>
+      </div>
+      {!ready ? <div className="warn-box">รันไฟล์ SQL 0018 ใน Supabase ก่อน จึงจะตั้งค่าส่วนนี้ได้ · Run SQL 0018 first.</div> : (
+        <>
+          <span className="note">ทุกการแจ้งเตือนในระบบ (มีคำขอรออนุมัติ · อนุมัติครบ · ถูกส่งกลับ ฯลฯ) จะถูกส่งเข้าอีเมลเข้าสู่ระบบของผู้ใช้ และอีเมลเพิ่มเติมที่ตั้งไว้ ส่งจากกล่องจดหมาย Microsoft 365 ของบริษัท · ผู้ใช้แต่ละคนปิดของตัวเองได้ที่หน้า “บัญชีและลายเซ็นของฉัน” · IT ต้องตั้งค่าตัวส่งอีเมล 1 ครั้งก่อนเปิดใช้ (README หัวข้อ “อีเมลแจ้งเตือน”)</span>
+          <label className="check"><input type="checkbox" id="email-on" checked={on} onChange={(e) => toggle(e.target.checked)} />เปิดการส่งอีเมลแจ้งเตือนทั้งระบบ · Send notification e-mails</label>
+          <div className="tiles">
+            <div className="tile"><span>รอส่ง · Waiting</span><b>{counts ? counts.pending + counts.sending : '—'}</b></div>
+            <div className="tile"><span>ส่งแล้ว (30 วัน) · Sent</span><b>{counts ? counts.sent : '—'}</b></div>
+            <div className="tile"><span style={{ color: counts?.failed ? 'var(--bad)' : undefined }}>ส่งไม่สำเร็จ · Failed</span><b>{counts ? counts.failed : '—'}</b></div>
+          </div>
+          <div className="row" style={{ gap: 10 }}>
+            <button className="btn" id="email-test" disabled={!!busy} onClick={test}>{busy === 'test' ? 'กำลังส่ง…' : `ส่งอีเมลทดสอบถึงฉัน (${me?.email}) · Send test`}</button>
+            <button className="btn" id="email-retry" disabled={!!busy || !counts || !(counts.failed + counts.pending)} onClick={retry}>{busy === 'retry' ? 'กำลังส่ง…' : 'ลองส่งที่ค้างอีกครั้ง · Retry'}</button>
+          </div>
+          {result && <div className={result.ok ? 'ok-box' : 'warn-box'} id="email-result" role="status">{result.text}</div>}
+          {fails.length > 0 && (
+            <div className="tw">
+              <table className="t" style={{ minWidth: 560 }}>
+                <thead><tr><th>ถึง · To</th><th>เรื่อง · Subject</th><th>สถานะ</th><th>ข้อผิดพลาดล่าสุด · Last error</th></tr></thead>
+                <tbody>{fails.map((f) => <tr key={f.id}><td>{f.to_emails.join(', ')}</td><td>{f.subject}</td><td>{f.status === 'failed' ? 'ไม่สำเร็จ' : f.status === 'sent' ? 'ส่งแล้ว' : 'รอส่ง'}</td><td style={{ color: 'var(--bad)' }}>{f.error}</td></tr>)}</tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
+    </Section>
+  );
+}
+
 
 const RESET_WORD = 'ลบทั้งหมด';
 /** UAT clean-up before go-live: every request, its files and history; numbering restarts. */
@@ -690,6 +801,7 @@ export default function SettingsPage() {
       <Departments />
       <Units />
       <Places />
+      <EmailNotify />
       <ResetRequests />
     </AdminGate>
   );

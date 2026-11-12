@@ -46,6 +46,9 @@ A quotation approval workflow. A preparer enters the request and attaches the qu
 - รายการสินค้า SKU **แยกตามบริษัท**: เลือกบริษัทเพื่อดู (ผู้จัดทำ/ผู้อนุมัติดูได้) · ผู้ดูแลติ๊กบริษัทก่อนนำเข้า Excel หรือใส่คอลัมน์ “บริษัท” รายแถว (ติ๊กหลายบริษัท = SKU ใช้ร่วมกัน) · รหัสเดียวกันเป็นคนละสินค้าในแต่ละบริษัทได้ — ตารางแสดง “ใช้ร่วมกับ …” หรือ “รหัสซ้ำกับ … (คนละสินค้า)” · หน้าสร้างคำขอค้นหา SKU ในรายการของบริษัทผู้ซื้อ
 - ผู้ดูแลกด **🗑 ลบ SKU ทั้งหมด** ในรายการสินค้า SKU เลือกได้ว่าลบของบริษัทไหน (มีปุ่มดาวน์โหลดสำรองก่อนลบ) แล้วอัปโหลดไฟล์ใหม่
 - การแจ้งเตือน: ปุ่ม **🗑 ลบทั้งหมด** ใน pop-up กระดิ่งและหน้า “การแจ้งเตือนทั้งหมด” (ลบเฉพาะของตัวเอง ไม่กระทบคำขอ)
+- **อีเมลแจ้งเตือน** (ต้องตั้งค่าตามข้อ 2.7): ทุกการแจ้งเตือนส่งเข้าอีเมลเข้าสู่ระบบของผู้ใช้ผ่าน Microsoft 365 · แต่ละบัญชีปิดได้และเพิ่มอีเมลอีก 1 ที่อยู่ (ต้องเป็นโดเมนเดียวกับอีเมลเข้าสู่ระบบ) ที่หน้า “บัญชีและลายเซ็นของฉัน” หรือผู้ดูแลตั้งให้ในหน้า “บัญชีผู้ใช้และลายเซ็น”
+- ตั้งค่าระบบ → ฝ่าย: ปุ่ม **ลบ** สำหรับฝ่ายที่ไม่มีคำขอและไม่มีผู้ใช้สังกัด
+- รอฉันอนุมัติ: ติ๊กเลือกบริษัทที่ส่งคำขอ · “ตัดสินใจล่าสุด” มีคอลัมน์บริษัท (ตัวย่อ)
 
 **ผู้ดูแลระบบ · Admin**
 - ตรวจคำขอเปิดบัญชี (ผู้ใช้ล็อกอินด้วย Microsoft 365 → กรอกใบสมัคร → ผู้ดูแลอนุมัติ → ใช้งานได้)
@@ -90,6 +93,7 @@ Every state change goes through database functions, so amounts, approvers and si
    ต่อด้วย [`supabase/migrations/0015_pr_number.sql`](supabase/migrations/0015_pr_number.sql) กด **Run** (เลขที่ใบขอซื้อ รูปแบบ R1x-yy.xxxxxxxx · แก้คำขอที่ส่งแล้วได้เฉพาะหลังถูก Reject — ยกเลิกการดึงกลับของ 0014)
    ต่อด้วย [`supabase/migrations/0016_wet_name_clear_products.sql`](supabase/migrations/0016_wet_name_clear_products.sql) กด **Run** (ชื่อผู้ลงนามของตำแหน่งลายเซ็นสด · ผู้ดูแลลบ SKU ทั้งหมดในคลิกเดียวก่อนอัปโหลดใหม่)
    ต่อด้วย [`supabase/migrations/0017_company_products_clear_notifs.sql`](supabase/migrations/0017_company_products_clear_notifs.sql) กด **Run** (รายการสินค้า SKU แยกตามบริษัท — SKU เดิมถูกคัดลอกให้ทุกบริษัท · ผู้ใช้ลบการแจ้งเตือนทั้งหมดของตัวเองได้)
+   ต่อด้วย [`supabase/migrations/0018_email_notify_delete_dept.sql`](supabase/migrations/0018_email_notify_delete_dept.sql) กด **Run** (แจ้งเตือนทางอีเมล: การตั้งค่ารายบัญชี + คิวอีเมล · ลบฝ่ายที่ไม่มีการใช้งาน)
    > ระบบที่ใช้งานอยู่แล้ว: รันเฉพาะไฟล์ที่ยังไม่เคยรัน ตามลำดับเลข ข้อมูลเดิมถูกแปลงให้อัตโนมัติ และรันซ้ำได้โดยไม่เสียหาย
 4. ไปที่ **Project Settings → API** (หรือ **Data API / API Keys**) จดค่า:
    - **Project URL** → ใช้เป็น `NEXT_PUBLIC_SUPABASE_URL`
@@ -132,6 +136,22 @@ update public.profiles set roles = '{admin,preparer}', status = 'active' where e
 ```
 
 ---
+
+### 2.7 อีเมลแจ้งเตือนผ่าน Microsoft 365 (ไม่บังคับ) · Notification e-mails (IT admin)
+
+ระบบเก็บอีเมลที่ต้องส่งไว้ในตาราง `email_outbox` (SQL 0018) แล้ว Edge Function `send-emails` ส่งออกทางกล่องจดหมายของบริษัทด้วย Microsoft Graph รหัสลับทั้งหมดอยู่ใน Supabase ไม่อยู่ในแอปหรือ repo
+
+1. **กล่องจดหมายผู้ส่ง** — เตรียมกล่องจดหมาย เช่น `noreply@บริษัท` (shared mailbox ก็ได้)
+2. **Microsoft Entra** → App registrations → สร้างแอปใหม่ เช่น `Quotation Approval Mailer` (แยกจากแอปล็อกอิน) →
+   - **API permissions → Add → Microsoft Graph → Application permissions → `Mail.Send`** → **Grant admin consent**
+   - **Certificates & secrets → New client secret** จดค่าและวันหมดอายุ
+   - แนะนำ: จำกัดให้แอปส่งได้เฉพาะกล่องจดหมายผู้ส่ง (Exchange Online *RBAC for Applications* หรือ *Application Access Policy*) เพราะ `Mail.Send` แบบ Application ส่งแทนได้ทุกกล่องจดหมายถ้าไม่จำกัด
+3. **Supabase → Edge Functions → Deploy a new function** ชื่อ `send-emails` วางโค้ดจาก [`supabase/functions/send-emails/index.ts`](supabase/functions/send-emails/index.ts) (หรือ `supabase functions deploy send-emails`)
+4. **Supabase → Edge Functions → Secrets** เพิ่ม: `MS_TENANT_ID`, `MS_CLIENT_ID`, `MS_CLIENT_SECRET`, `MAIL_SENDER` (อีเมลกล่องผู้ส่ง), `APP_URL` (ลิงก์แอป เช่น `https://your-app.vercel.app`)
+5. **Supabase → Database → Webhooks → Create** : ตาราง `email_outbox` · Events **Insert** · Type **Supabase Edge Functions** → `send-emails` (เพื่อให้ส่งทันทีที่มีการแจ้งเตือนใหม่)
+6. ในแอป: **ตั้งค่าระบบ → อีเมลแจ้งเตือน** กด **ส่งอีเมลทดสอบถึงฉัน** — ถ้าตั้งค่าไม่ครบ หน้าจอจะบอกว่าขาดอะไร (เช่น Secret ที่ยังไม่ได้ใส่ หรือข้อความผิดพลาดจาก Microsoft) เมื่อได้รับอีเมลแล้วจึงติ๊ก **เปิดการส่งอีเมลแจ้งเตือนทั้งระบบ**
+
+อีเมลที่ส่งไม่สำเร็จ 3 ครั้งจะขึ้นในตาราง “ส่งไม่สำเร็จ” พร้อมสาเหตุ กด **ลองส่งที่ค้างอีกครั้ง** ได้หลังแก้ไข · อีเมลที่ส่งแล้วเกิน 30 วันถูกลบออกจากคิวเอง
 
 ## 3. เริ่มใช้งาน · Getting started in the app
 
@@ -219,6 +239,7 @@ psql -d qa_test -v ON_ERROR_STOP=1 -f supabase/tests/94_recall_test.sql         
 psql -d qa_test -v ON_ERROR_STOP=1 -f supabase/tests/95_pr_number_test.sql         # runs 0015 itself; ends with: ALL 0015 TESTS PASSED
 psql -d qa_test -v ON_ERROR_STOP=1 -f supabase/tests/96_wet_name_clear_products_test.sql  # runs 0016 itself; ends with: ALL 0016 TESTS PASSED
 psql -d qa_test -v ON_ERROR_STOP=1 -f supabase/tests/97_company_products_test.sql       # runs 0017 itself; ends with: ALL 0017 TESTS PASSED
+psql -d qa_test -v ON_ERROR_STOP=1 -f supabase/tests/98_email_notify_delete_dept_test.sql  # runs 0018 itself; ends with: ALL 0018 TESTS PASSED
 ```
 ครอบคลุม · Covers: first admin, applications, self-promotion blocked, server-side amounts and tiers, approver resolution by department, signatures required, forward rules, reject → reopen → resend (keeps number), admin remind/reassign/cancel, letter path rules, visibility for outsiders, disabled accounts.
 

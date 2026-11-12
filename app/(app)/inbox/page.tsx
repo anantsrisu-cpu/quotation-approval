@@ -1,6 +1,6 @@
 'use client';
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useApp } from '@/components/AppProvider';
 import { PdfButton } from '@/components/PdfButton';
 import { LIST_COLS, Loading, PageHead, ReqTable } from '@/components/ui';
@@ -8,7 +8,9 @@ import { SUBJ, dt, fmt } from '@/lib/format';
 import type { RequestRow } from '@/lib/types';
 
 export default function Inbox() {
-  const { sb, uid, bump, name } = useApp();
+  const { sb, uid, bump, name, companies } = useApp();
+  // companies un-ticked in the filter (everything is shown until one is un-ticked)
+  const [hide, setHide] = useState<string[]>([]);
   const [waiting, setWaiting] = useState<RequestRow[] | null>(null);
   const [done, setDone] = useState<RequestRow[]>([]);
 
@@ -31,7 +33,11 @@ export default function Inbox() {
     })();
   }, [sb, uid, bump]);
 
-  const list = waiting || [];
+  const all = useMemo(() => waiting || [], [waiting]);
+  const coShort = (id?: string | null) => { const c = companies.find((x) => x.id === id); return c ? c.initials?.trim() || c.en?.trim() || c.th : '—'; };
+  // the companies that have something waiting, in the order set in ตั้งค่าระบบ
+  const cos = useMemo(() => companies.filter((c) => all.some((r) => r.company_id === c.id)), [companies, all]);
+  const list = all.filter((r) => !hide.includes(r.company_id || ''));
   return (
     <>
       <PageHead title="คำขอที่รอคุณอนุมัติ" lead="Requests waiting for your approval — only those at your step" />
@@ -40,6 +46,18 @@ export default function Inbox() {
         <div className="tile"><span>ยอดรวมที่รอ (บาท)</span><b className="num" style={{ fontSize: 20 }}>{fmt(list.reduce((a, r) => a + (r.total || 0), 0))}</b></div>
         <div className="tile"><span>ตัดสินใจล่าสุด · Decided</span><b>{done.length}</b></div>
       </div>
+      {cos.length > 1 && (
+        <fieldset className="co-pick" id="inbox-co">
+          <legend>บริษัทที่ส่งคำขอ · Company</legend>
+          {cos.map((c) => (
+            <label key={c.id} className="check" title={c.th}>
+              <input type="checkbox" checked={!hide.includes(c.id)} onChange={(e) => setHide(e.target.checked ? hide.filter((x) => x !== c.id) : [...hide, c.id])} />
+              <b>{coShort(c.id)}</b>&nbsp;{c.th} ({all.filter((r) => r.company_id === c.id).length})
+            </label>
+          ))}
+          {hide.length > 0 && <button className="btn sm" onClick={() => setHide([])}>แสดงทุกบริษัท · Show all</button>}
+        </fieldset>
+      )}
       {waiting === null ? <Loading /> : list.length ? (
         list.map((r) => {
           const steps = [...(r.request_steps || [])].sort((a, b) => a.step_no - b.step_no);
@@ -48,6 +66,7 @@ export default function Inbox() {
             <div key={r.id} className="card" style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center' }}>
               <div style={{ flex: '999 1 320px', minWidth: 0 }}>
                 <div className="row" style={{ gap: 8, alignItems: 'center' }}>
+                  <span className="chip st-draft co-chip" title={companies.find((x) => x.id === r.company_id)?.th}>{coShort(r.company_id)}</span>
                   <span className="mono note">{r.no}</span>
                   <span className="chip st-pend">ขั้น {r.current_step + 1} จาก {steps.length}{r.current_step === steps.length - 1 ? ' (สุดท้าย)' : ''}</span>
                   {cur?.on_behalf_of && <span className="chip st-draft">อนุมัติแทน {name(cur.on_behalf_of)}</span>}
@@ -64,10 +83,10 @@ export default function Inbox() {
           );
         })
       ) : (
-        <div className="card"><p className="lead" style={{ margin: 0 }}>ไม่มีคำขอรอคุณตอนนี้ · Nothing waiting for you right now</p></div>
+        <div className="card"><p className="lead" style={{ margin: 0 }}>{all.length ? 'ไม่มีคำขอของบริษัทที่ติ๊กไว้ · Nothing for the ticked companies' : 'ไม่มีคำขอรอคุณตอนนี้ · Nothing waiting for you right now'}</p></div>
       )}
       <h2>ตัดสินใจล่าสุด · Recent decisions</h2>
-      <ReqTable list={done} empty="ยังไม่มี · None yet" actions={(r) => <PdfButton r={r} />} />
+      <ReqTable list={done} empty="ยังไม่มี · None yet" company actions={(r) => <PdfButton r={r} />} />
     </>
   );
 }

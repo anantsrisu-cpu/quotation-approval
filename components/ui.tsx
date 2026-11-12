@@ -42,8 +42,10 @@ export function useStepText() {
   };
 }
 
-export function ReqTable({ list, empty, actions }: { list: RequestRow[]; empty?: string; actions?: (r: RequestRow) => React.ReactNode }) {
-  const { name } = useApp();
+/** `company`: also show the buyer company as its short English name (ตัวย่อ) */
+export function ReqTable({ list, empty, actions, company }: { list: RequestRow[]; empty?: string; actions?: (r: RequestRow) => React.ReactNode; company?: boolean }) {
+  const { name, companies } = useApp();
+  const coShort = (id?: string | null) => { const c = companies.find((x) => x.id === id); return c ? c.initials?.trim() || c.en?.trim() || c.th : '—'; };
   const stepText = useStepText();
   if (!list.length)
     return (
@@ -57,6 +59,7 @@ export function ReqTable({ list, empty, actions }: { list: RequestRow[]; empty?:
         <thead>
           <tr>
             <th>เลขที่ · No.</th>
+            {company && <th>บริษัท · Co.</th>}
             <th>เรื่อง / สินค้า · Subject</th>
             <th style={{ textAlign: 'right' }}>ยอดรวม (บาท)</th>
             <th>ลำดับผู้อนุมัติ · Chain</th>
@@ -71,6 +74,7 @@ export function ReqTable({ list, empty, actions }: { list: RequestRow[]; empty?:
                 <Link href={`/requests/${r.id}`} className="mono" style={{ fontSize: 13 }}>{r.no || 'ฉบับร่าง'}</Link>
                 <div className="note">{dt(r.submitted_at || r.created_at)}</div>
               </td>
+              {company && <td><span className="chip st-draft co-chip" title={companies.find((x) => x.id === r.company_id)?.th}>{coShort(r.company_id)}</span></td>}
               <td>
                 <Link href={`/requests/${r.id}`} style={{ color: 'inherit', textDecoration: 'none' }}>
                   <b style={{ fontWeight: 500 }}>{SUBJ[r.subject_type]} · {r.product_name || r.sku || '—'}</b>
@@ -133,4 +137,4 @@ export function PageHead({ title, lead, children }: { title: React.ReactNode; le
 
 /** Columns used by every request list (no signature images). */
 export const LIST_COLS =
-  'id,no,status,preparer_id,created_by,subject_type,sku,product_name,total,vendor,bought_vendors,dept,created_at,submitted_at,current_step,step_since,completed_at,buyer_id,letter_path,request_steps(step_no,position,approver_id,status,signer_id,on_behalf_of)';
+  'id,no,status,preparer_id,created_by,company_id,subject_type,sku,product_name,total,vendor,bought_vendors,dept,created_at,submitted_at,current_step,step_since,completed_at,buyer_id,letter_path,request_steps(step_no,position,approver_id,status,signer_id,on_behalf_of)';

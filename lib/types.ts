@@ -14,6 +14,10 @@ export interface Profile {
   status: ProfileStatus;
   /** companies this approver signs for (empty = every company) */
   companies?: string[];
+  /** receive notifications by e-mail (0018) */
+  email_notify?: boolean;
+  /** one more address for notification e-mails, same domain as `email` */
+  notify_email?: string;
   requested_roles: Role[];
   apply_note: string;
   review_note: string;
@@ -33,6 +37,8 @@ export interface Settings {
   vat_rate: number;
   recipient: string;
   request_prefix: string;
+  /** admin switch: send notification e-mails (0018) */
+  email_enabled?: boolean;
 }
 export interface Position { code: string; th: string; en: string; sort: number; note?: string; sign_mode?: 'online' | 'wet'; wet_name?: string }
 /** One approver position on the comparison sheet, saved when the request is sent. */

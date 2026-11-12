@@ -31,12 +31,18 @@ function Editor({ p, hasSig, onSaved }: { p: Profile; hasSig: boolean; onSaved: 
   async function save() {
     if (!e.name.trim()) return toast('bad', 'กรอกชื่อ · Name required', '');
     if (e.roles.includes('approver') && !e.position) return toast('bad', 'ผู้อนุมัติต้องมีตำแหน่งอนุมัติ · Approvers need a position', '');
+    const domain = (p.email.split('@')[1] || '').toLowerCase();
+    const extra = (e.notify_email || '').trim().toLowerCase();
+    if (extra && (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(extra) || extra.split('@')[1] !== domain))
+      return toast('bad', 'อีเมลแจ้งเตือนไม่ถูกต้อง · Notification e-mail not accepted', `ต้องเป็นอีเมลโดเมนเดียวกับบัญชีนี้ (@${domain})`);
     if (self && (!e.roles.includes('admin') || e.status !== 'active')) return toast('bad', 'ห้ามถอดสิทธิ์ผู้ดูแลของตัวเอง · You cannot remove your own admin access', 'ให้ผู้ดูแลคนอื่นทำแทน · Ask another admin');
     setBusy(true);
     const { ok } = await run('admin-save-user', sb.from('profiles').update({
       name: e.name.trim(), title: e.title.trim(), dept: e.dept || null, roles: e.roles,
       position: e.roles.includes('approver') ? e.position || null : null, status: e.status,
       companies: e.roles.includes('approver') ? e.companies || [] : [],
+      // e-mail notification settings exist once SQL 0018 has been run
+      ...('email_notify' in p ? { email_notify: e.email_notify !== false, notify_email: extra } : {}),
     }).eq('id', p.id));
     let sigOk = true;
     const newSig = pending || pad.current?.getData();
@@ -78,6 +84,17 @@ function Editor({ p, hasSig, onSaved }: { p: Profile; hasSig: boolean; onSaved: 
           {departments.map((d) => <option key={d.id} value={d.id}>{d.th}</option>)}
         </select>
       </label>
+      {'email_notify' in p && (
+        <fieldset className="co-pick">
+          <legend>การแจ้งเตือนทางอีเมล · E-mail notifications</legend>
+          <label className="check"><input type="checkbox" id="u-mail-on" checked={e.email_notify !== false} onChange={(x) => setE({ ...e, email_notify: x.target.checked })} />ส่งการแจ้งเตือนเข้าอีเมล {p.email}</label>
+          <label className="f" htmlFor="u-mail" style={{ flex: '1 1 100%' }}>อีเมลแจ้งเตือนเพิ่มเติม · One more address
+            <input className="in" id="u-mail" type="email" autoComplete="off" maxLength={200} disabled={e.email_notify === false} value={e.notify_email || ''}
+              placeholder={`เช่น team@${(p.email.split('@')[1] || '').toLowerCase()}`} onChange={(x) => setE({ ...e, notify_email: x.target.value })} />
+            <span className="note" style={{ fontWeight: 400 }}>อีเมลเข้าสู่ระบบเปลี่ยนไม่ได้ · อีเมลเพิ่มเติมต้องเป็นโดเมนเดียวกัน (@{(p.email.split('@')[1] || '').toLowerCase()})</span>
+          </label>
+        </fieldset>
+      )}
       <fieldset style={{ border: 'none', margin: 0, padding: 0 }}>
         <legend style={{ fontSize: 14, fontWeight: 500, padding: 0 }}>บทบาท · Roles</legend>
         {(['preparer', 'approver', 'admin'] as Role[]).map((r) => (

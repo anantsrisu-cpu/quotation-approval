@@ -284,3 +284,6 @@ table.cmp tr.why.split td{background:var(--sage-bg)}
 .co-cell .chip{white-space:normal}
 .clear-ask{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 12px;background:var(--bad-bg);border:1px solid var(--bad-line);border-radius:10px;padding:10px 14px;margin:0 12px 10px;font-size:14px}
 .clear-ask.card{margin:0;flex-direction:row}
+.mail-prefs{display:grid;gap:12px;border-top:1px solid var(--beige);padding-top:16px;margin-top:4px}
+.mail-prefs h2{margin:0}
+.co-chip{font-weight:600;letter-spacing:.02em}
