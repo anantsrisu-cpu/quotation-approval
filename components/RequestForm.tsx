@@ -40,8 +40,10 @@ interface Draft {
   low_reason: string;
 }
 
-const today = () => new Date().toISOString().slice(0, 10);
 const MAX_ITEMS = 200;
+/** above PAGE_FROM items the form shows PAGE_ITEMS at a time, so typing stays fast on long requests */
+const PAGE_ITEMS = 25;
+const PAGE_FROM = 30;
 const skuKey = (s: string) => s.trim().toUpperCase();
 const money = (v: number | null | undefined) => (v ? fmt(v) : '');
 const normDisc = (v: string) => v.replace(/[\s,]/g, '');
@@ -77,7 +79,9 @@ function parseTsv(text: string): string[][] {
 /** Rows copied from Excel: SKU · qty · unit price · discount · previous price · description. */
 function parsePasted(text: string): DraftItem[] {
   return parseTsv(text)
-    .filter((c) => c[0] && !/^(sku|รหัส)/i.test(c[0]))
+    // only the first row can be a header, and only when its quantity cell is not a number
+    // (a real SKU may itself start with "SKU-…")
+    .filter((c, r) => c[0] && !(r === 0 && /^(sku|รหัส|item ?code)/i.test(c[0]) && !/^[\d.,\s]+$/.test(c[1] || '')))
     .map((c) => ({ ...blankItem(), sku: skuKey(c[0]), qty: c[1] || '1', unit_price: c[2] || '', discount: c[3] || '', prev_price: c[4] || '', description: c.slice(5).filter(Boolean).join(' ') }));
 }
 
@@ -106,7 +110,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
       preparer_id: forUser && has('admin') ? forUser : has('preparer') ? me?.id || '' : '',
       subject_type: 'general', items: [blankItem()],
       dept: (forUser && people[forUser]?.dept) || me?.dept || departments[0]?.id || '', purpose: 'replace', buyer_id: '',
-      company_id: companies.find((c) => c.active)?.id || '', vendor: '', quote_no: '', quote_date: today(),
+      company_id: companies.find((c) => c.active)?.id || '', vendor: '', quote_no: '', quote_date: '',
       credit_days: '', lead_days: '', warranty: '', report_no: '', report_date: '', delivery: blankDelivery(),
       details: '', comps: [{ ...blankComp(1), delivery: blankDelivery() }, { ...blankComp(1), delivery: blankDelivery() }],
       no_comp: false, no_comp_reason: '', low_reason: '', multi_vendor: false,
@@ -120,6 +124,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
   const [files, setFiles] = useState<RequestFile[]>([]);
   const [prods, setProds] = useState<Record<string, Product | null>>({}); // SKU → product (null = not found)
   const [active, setActive] = useState(0); // item whose SKU field is being typed
+  const [ipage, setIpage] = useState(0); // page of items shown (long requests only)
   const [suggest, setSuggest] = useState<Product[]>([]);
   const [approvers, setApprovers] = useState<ApproverPreview[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
@@ -164,7 +169,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
         preparer_id: keepPreparer ? r.preparer_id : me?.id || '',
         subject_type: r.subject_type, items, dept: r.dept || '', purpose: r.purpose,
         buyer_id: r.buyer_id || '', company_id: r.company_id || '', vendor: r.vendor,
-        quote_no: copyFrom ? '' : r.quote_no, quote_date: copyFrom ? today() : r.quote_date || today(),
+        quote_no: copyFrom ? '' : r.quote_no, quote_date: copyFrom ? '' : r.quote_date || '',
         details: r.details,
         comps: comps.length ? comps : [{ ...blankComp(items.length), delivery: blankDelivery() }],
         delivery: fixDelivery(r.delivery),
@@ -201,7 +206,8 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
     });
   const setItem = (i: number, patch: Partial<DraftItem>) =>
     setD((x) => (x ? { ...x, items: x.items.map((it, j) => (j === i ? { ...it, ...patch } : it)) } : x));
-  const addItems = (list: DraftItem[], at?: number) =>
+  const addItems = (list: DraftItem[], at?: number) => {
+    setIpage(Math.floor((at ?? d?.items.length ?? 0) / PAGE_ITEMS)); // show the page the new rows start on
     setD((x) => {
       if (!x) return x;
       const room = MAX_ITEMS - x.items.length;
@@ -218,6 +224,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
         })),
       };
     });
+  };
   /** an Excel form dropped on the items section or chosen in the paste window */
   async function takeItemFile(file: File) {
     try {
@@ -363,6 +370,22 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
   const prodOf = (it: DraftItem) => prods[`${d.company_id}|${skuKey(it.sku)}`];
   const nameOf = (it: DraftItem) => prodOf(it)?.name || '';
   const n = d.items.length;
+  // long requests: only one page of items is on screen (every keystroke re-draws what is shown)
+  const paged = n > PAGE_FROM;
+  const pages = paged ? Math.ceil(n / PAGE_ITEMS) : 1;
+  const page = Math.min(ipage, pages - 1);
+  const from = paged ? page * PAGE_ITEMS : 0;
+  const to = paged ? Math.min(n, from + PAGE_ITEMS) : n;
+  const pager = (where: string) => paged && (
+    <div className="pager items-pager" role="navigation" aria-label={`หน้ารายการ · Item pages (${where})`}>
+      <span className="note">แสดงรายการที่ <b>{from + 1}–{to}</b> จาก {n} · Items {from + 1}–{to} of {n}</span>
+      <button type="button" className="btn sm" disabled={page === 0} onClick={() => setIpage(page - 1)}>← ก่อนหน้า</button>
+      <select className="in" style={{ width: 'auto', minHeight: 36, padding: '4px 8px' }} aria-label="ไปหน้า · Go to page" value={page} onChange={(e) => setIpage(Number(e.target.value))}>
+        {Array.from({ length: pages }, (_, k) => <option key={k} value={k}>{k * PAGE_ITEMS + 1}–{Math.min(n, (k + 1) * PAGE_ITEMS)}</option>)}
+      </select>
+      <button type="button" className="btn sm" disabled={page >= pages - 1} onClick={() => setIpage(page + 1)}>ถัดไป →</button>
+    </div>
+  );
   const firstName = nameOf(d.items[0]) || '[ชื่อสินค้า]';
   const summaryName = firstName + (n > 1 ? ` และอีก ${n - 1} รายการ` : '');
   const proxy = d.preparer_id !== me.id;
@@ -701,9 +724,6 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
           <label className="f" htmlFor="f-warranty">การรับประกัน · Warranty
             <input className="in" id="f-warranty" value={d.warranty} maxLength={200} placeholder="เช่น 1 ปี" onChange={(e) => set('warranty', e.target.value)} />
           </label>
-          <label className="f" htmlFor="f-quote">เลขที่ใบเสนอราคาผู้ขาย · Vendor quote no.
-            <input className="in" id="f-quote" value={d.quote_no} onChange={(e) => set('quote_no', e.target.value)} />
-          </label>
           <label className="f" htmlFor="f-rno">เลขที่ใบขอซื้อ · PR no. <span className="req">*</span>
             <input className="in mono" id="f-rno" value={d.report_no} maxLength={15} placeholder={`${PR_FORMAT} เช่น ${PR_EXAMPLE}`} aria-required="true"
               aria-invalid={!!d.report_no.trim() && !isPr(d.report_no)} aria-describedby="f-rno-help" autoCapitalize="characters" spellCheck={false}
@@ -720,9 +740,6 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
           <label className="f" htmlFor="f-rdate">วันที่อนุมัติ (ถ้ามี) · Approval date
             <input className="in" type="date" id="f-rdate" value={d.report_date} onChange={(e) => set('report_date', e.target.value)} />
             <span className="note" style={{ fontWeight: 400 }}>ว่างไว้ = วันที่อนุมัติครบในระบบ</span>
-          </label>
-          <label className="f" htmlFor="f-qdate">วันที่ใบเสนอราคา · Quotation date
-            <input className="in" type="date" id="f-qdate" value={d.quote_date} onChange={(e) => set('quote_date', e.target.value)} />
           </label>
           <label className="f" htmlFor="f-buyer">ชื่อผู้ซื้อ · Buyer name <span className="req">*</span>
             <select className="in" id="f-buyer" value={d.buyer_id} onChange={(e) => set('buyer_id', e.target.value)}>
@@ -773,8 +790,10 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
           </div>
         </div>
         <datalist id="sku-suggest">{suggest.map((p) => <option key={p.sku} value={p.sku}>{p.name}</option>)}</datalist>
+        {pager('บน')}
         <ol className="items">
-          {d.items.map((it, i) => {
+          {d.items.slice(from, to).map((it, idx) => {
+            const i = from + idx;
             const L = c.lines[i];
             const p = prodOf(it);
             const key = skuKey(it.sku);
@@ -861,6 +880,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
             );
           })}
         </ol>
+        {pager('ล่าง')}
         <span className="note">มีหลายรายการ? กด “ฟอร์ม Excel” ไปกรอก แล้วลากไฟล์มาวางในส่วนนี้ · Many items? Download the form, fill it in and drop the file here.</span>
         </div>
         <div className="actions">
@@ -930,6 +950,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
                 <button type="button" className="icon-btn" style={{ background: 'var(--brown)', color: '#fff', borderColor: 'var(--brown)' }} onClick={addComp} aria-label="เพิ่มคู่เทียบ · Add a vendor">+</button>
               </span>
             </div>
+            {pager('คู่เทียบ')}
             <div className="tw">
               <table className="t cmp">
                 <thead>
@@ -950,7 +971,8 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
                   </tr>
                 </thead>
                 <tbody>
-                  {d.items.map((it, k) => {
+                  {d.items.slice(from, to).map((it, idx) => {
+                    const k = from + idx;
                     const a = c.awards[k];
                     return (
                     <Fragment key={k}>

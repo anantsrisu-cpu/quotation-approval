@@ -39,9 +39,15 @@ export function startSlowWatch(report: typeof reportError = reportError) {
     : null;
   lo?.observe({ type: 'long-animation-frame', buffered: true });
 
+  // a tab that was in the background (or a laptop waking up) reports huge waits that are not freezes
+  let visibleSince = document.visibilityState === 'visible' ? -Infinity : Infinity;
+  const onVis = () => { visibleSince = document.visibilityState === 'visible' ? performance.now() : Infinity; };
+  document.addEventListener('visibilitychange', onVis);
+
   const ev = new PerformanceObserver((l) => {
     for (const e of l.getEntries() as PerformanceEventTiming[]) {
       if (sent >= MAX_REPORTS || e.duration < SLOW_MS) continue;
+      if (e.startTime < visibleSince + 3000) continue;
       // one report per interaction (keydown + keypress + input share an id)
       const id = (e as PerformanceEventTiming & { interactionId?: number }).interactionId || Math.round(e.startTime);
       if (seen.has(id)) continue;
@@ -70,7 +76,8 @@ export function startSlowWatch(report: typeof reportError = reportError) {
         ...scripts.map((s) => `  - ${Math.round(s.duration)} ms · ${s.invokerType || ''} ${s.invoker || ''} · ${(s.sourceURL || '(none)').replace(/\?.*$/, '')}${s.sourceFunctionName ? ' ' + s.sourceFunctionName : ''}${s.forcedStyleAndLayoutDuration ? ` · layout ${Math.round(s.forcedStyleAndLayoutDuration)} ms` : ''}`),
         `hidden: ${document.visibilityState} · cores: ${navigator.hardwareConcurrency || '?'} · memory: ${(navigator as Navigator & { deviceMemory?: number }).deviceMemory || '?'} GB`,
       ];
-      report(`หน้าเว็บค้าง ${(e.duration / 1000).toFixed(1)} วินาที ขณะ ${e.name} · Page froze`, { action: 'slow-interaction', detail: lines.join('\n') });
+      // the cause and the screen go in the title, so the admin can tell app bugs from extensions at a glance
+      report(`หน้าเว็บค้าง ${(e.duration / 1000).toFixed(1)} วินาที ขณะ ${e.name} · Page froze — ${main.split(' · ')[0]} · ${location.pathname}`, { action: 'slow-interaction', detail: lines.join('\n') });
     }
   });
   try {
@@ -78,5 +85,5 @@ export function startSlowWatch(report: typeof reportError = reportError) {
   } catch {
     return () => lo?.disconnect();
   }
-  return () => { ev.disconnect(); lo?.disconnect(); };
+  return () => { ev.disconnect(); lo?.disconnect(); document.removeEventListener('visibilitychange', onVis); };
 }

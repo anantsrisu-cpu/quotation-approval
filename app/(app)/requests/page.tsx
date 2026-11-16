@@ -9,14 +9,17 @@ import { PdfButton } from '@/components/PdfButton';
 import type { RequestRow } from '@/lib/types';
 
 export default function MyRequests() {
-  const { sb, uid, bump, has } = useApp();
+  const { sb, uid, bump, has, toast } = useApp();
   const [list, setList] = useState<RequestRow[] | null>(null);
 
   useEffect(() => {
     if (!uid) return;
     sb.from('requests').select(LIST_COLS).or(`preparer_id.eq.${uid},created_by.eq.${uid}`).order('created_at', { ascending: false }).limit(200)
-      .then(({ data }) => setList((data as unknown as RequestRow[]) || []));
-  }, [sb, uid, bump]);
+      .then(({ data, error }) => {
+        if (error) toast('bad', 'โหลดรายการไม่สำเร็จ · Could not load the list', 'ตรวจอินเทอร์เน็ตแล้วเปิดหน้านี้ใหม่ · Check your connection and reload');
+        setList((data as unknown as RequestRow[]) || []);
+      });
+  }, [sb, uid, bump, toast]);
 
   const c = (s: string) => (list || []).filter((r) => r.status === s).length;
   return (

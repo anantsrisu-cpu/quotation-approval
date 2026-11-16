@@ -233,7 +233,8 @@ export default function RequestDetail() {
                 ['เครดิต / Lead time', `${daysText(r.credit_days)} / ${daysText(r.lead_days)}`],
                 ['การรับประกัน · Warranty', r.warranty || '—'],
                 ['เลขที่ใบขอซื้อ / วันที่อนุมัติ (หัวตาราง)', `${r.report_no || r.no || '—'} / ${r.report_date ? dOnly(r.report_date) : 'วันที่อนุมัติครบ'}`],
-                ['เลขที่ใบเสนอราคา · Quote no.', r.quote_no || '—'],
+                // shown only on older requests that have one (the field is no longer on the form)
+                ...(r.quote_no ? [['เลขที่ใบเสนอราคา · Quote no.', r.quote_no] as [string, string]] : []),
                 ['ผู้ซื้อ · Buyer', name(r.buyer_id)],
                 ['บริษัทผู้ซื้อ · Buyer company', co?.th || '—'],
                 ['ผู้จัดทำ · Prepared by', name(r.preparer_id) + (proxy ? ` (จัดทำแทนโดย ${name(r.created_by)})` : '')],

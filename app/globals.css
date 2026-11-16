@@ -287,3 +287,4 @@ table.cmp tr.why.split td{background:var(--sage-bg)}
 .mail-prefs{display:grid;gap:12px;border-top:1px solid var(--beige);padding-top:16px;margin-top:4px}
 .mail-prefs h2{margin:0}
 .co-chip{font-weight:600;letter-spacing:.02em}
+.items-pager{flex-wrap:wrap;justify-content:flex-start;background:var(--soft);border-radius:10px;padding:8px 12px}

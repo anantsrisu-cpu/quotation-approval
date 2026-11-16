@@ -8,7 +8,7 @@ import { SUBJ, dt, fmt } from '@/lib/format';
 import type { RequestRow } from '@/lib/types';
 
 export default function Inbox() {
-  const { sb, uid, bump, name, companies } = useApp();
+  const { sb, uid, bump, name, companies, toast } = useApp();
   // companies un-ticked in the filter (everything is shown until one is un-ticked)
   const [hide, setHide] = useState<string[]>([]);
   const [waiting, setWaiting] = useState<RequestRow[] | null>(null);
@@ -23,15 +23,20 @@ export default function Inbox() {
       ]);
       const wIds = (p.data || []).map((x) => x.request_id);
       const dIds = Array.from(new Set((d.data || []).map((x) => x.request_id)));
-      const [w, dd] = await Promise.all([
-        wIds.length ? sb.from('requests').select(LIST_COLS).in('id', wIds).eq('status', 'pending').order('step_since') : Promise.resolve({ data: [] }),
+      if (p.error || d.error) toast('bad', 'โหลดรายการไม่สำเร็จ · Could not load the list', 'ตรวจอินเทอร์เน็ตแล้วเปิดหน้านี้ใหม่ · Check your connection and reload');
+      // many requests waiting: ask in groups of 100 so the request address never gets too long
+      const groups: string[][] = [];
+      for (let i = 0; i < wIds.length; i += 100) groups.push(wIds.slice(i, i + 100));
+      const [ws, dd] = await Promise.all([
+        Promise.all(groups.map((g) => sb.from('requests').select(LIST_COLS).in('id', g).eq('status', 'pending'))),
         dIds.length ? sb.from('requests').select(LIST_COLS).in('id', dIds) : Promise.resolve({ data: [] }),
       ]);
+      const w = { data: ws.flatMap((x) => (x.data as unknown as RequestRow[]) || []).sort((a, b) => String(a.step_since || '').localeCompare(String(b.step_since || ''))) };
       setWaiting((w.data as unknown as RequestRow[]) || []);
       const order = new Map(dIds.map((id, i) => [id, i]));
       setDone((((dd.data as unknown as RequestRow[]) || []).sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0))));
     })();
-  }, [sb, uid, bump]);
+  }, [sb, uid, bump, toast]);
 
   const all = useMemo(() => waiting || [], [waiting]);
   const coShort = (id?: string | null) => { const c = companies.find((x) => x.id === id); return c ? c.initials?.trim() || c.en?.trim() || c.th : '—'; };
