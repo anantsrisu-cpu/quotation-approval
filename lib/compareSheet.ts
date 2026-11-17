@@ -289,10 +289,14 @@ ${text3('PAYMENT TERM', (v) => (v.creditDays == null ? '' : v.creditDays === 0 ?
 </tbody>`;
 }
 
-function bottomHtml(d: SheetData) {
+/**
+ * Remarks + signature boxes. Every page carries the signatures (each page is part of what is
+ * approved); the remarks themselves are written once, on the last page — earlier pages point there.
+ */
+function bottomHtml(d: SheetData, lastPage: number | null = null) {
   const notes = d.notes.filter(Boolean);
-  const lines = [...notes, ...Array(Math.max(0, 4 - notes.length)).fill('')];
-  return `<div class="cs-bottom"><div class="cs-notes"><u>หมายเหตุ</u>${lines.map((l) => `<div class="ln">${esc(l)}</div>`).join('')}</div>
+  const lines = lastPage ? [`ยอดรวมและหมายเหตุ อยู่ที่หน้า ${lastPage}/${lastPage}`, '', ''] : [...notes, ...Array(Math.max(0, 4 - notes.length)).fill('')];
+  return `<div class="cs-bottom${lastPage ? ' cont' : ''}"><div class="cs-notes"><u>หมายเหตุ</u>${lines.map((l) => `<div class="ln">${esc(l)}</div>`).join('')}</div>
 ${d.signers
   .map(
     (s) => `<div class="cs-sig${s.state === 'skip' ? ' skip' : ''}"><div class="h"><b>${esc(s.heading)}</b>${s.range ? `<br>${esc(s.range)}` : ''}<br>${esc(s.caption)}${s.state === 'wet' ? ' <span class="wet">· ลายเซ็นสด</span>' : ''}</div>
@@ -311,9 +315,10 @@ function mainTable(d: SheetData, L: ReturnType<typeof layoutCols>, rows: number[
     .join('')}${fill}</tbody>${withFoot ? tfootHtml(d) : ''}</table>`;
 }
 
-/** Split rows over pages so that the totals, remarks and signatures end the last page. */
-function paginate(d: SheetData, m: { head: number; thead: number; rows: number[]; foot: number; bottom: number }) {
-  const cap = SHEET_H - PAD_Y * 2 - m.head - m.thead - 2;
+/** Split rows over pages: signatures end every page; the totals and remarks end the last one. */
+function paginate(d: SheetData, m: { head: number; thead: number; rows: number[]; foot: number; bottom: number; cont: number }) {
+  // every page ends with the signature boxes (m.cont); the last page has the totals and full remarks instead
+  const cap = SHEET_H - PAD_Y * 2 - m.head - m.thead - 2 - m.cont;
   const pages: number[][] = [[]];
   let used = 0;
   m.rows.forEach((h, k) => {
@@ -325,7 +330,7 @@ function paginate(d: SheetData, m: { head: number; thead: number; rows: number[]
     used += h;
   });
   const usedOf = (p: number[]) => p.reduce((s, k) => s + m.rows[k], 0);
-  const tail = m.foot + m.bottom;
+  const tail = m.foot + m.bottom - m.cont;
   // the last page needs room for the totals block; move rows forward until it fits
   const last = pages[pages.length - 1];
   if (usedOf(last) + tail > cap) {
@@ -353,7 +358,7 @@ export async function renderSheet(host: HTMLElement, d: SheetData): Promise<numb
   const meas = doc.createElement('div');
   meas.setAttribute('aria-hidden', 'true');
   meas.style.cssText = 'position:fixed;left:-20000px;top:0;visibility:hidden;pointer-events:none';
-  meas.innerHTML = `<div class="cs-page" style="height:auto">${headerHtml(d, 1, 1)}${mainTable(d, L, d.items.map((_, k) => k), true, 0)}${bottomHtml(d)}</div>`;
+  meas.innerHTML = `<div class="cs-page" style="height:auto">${headerHtml(d, 1, 1)}${mainTable(d, L, d.items.map((_, k) => k), true, 0)}${bottomHtml(d)}${bottomHtml(d, 9)}</div>`;
   doc.body.appendChild(meas);
   const imgs = Array.from(meas.querySelectorAll('img'));
   await Promise.all(imgs.map((im) => (im.complete ? null : new Promise((r) => { im.onload = im.onerror = r; }))));
@@ -365,7 +370,8 @@ export async function renderSheet(host: HTMLElement, d: SheetData): Promise<numb
     thead: hOf(pageEl.querySelector('.cs-main thead')),
     rows: d.items.map((_, k) => hOf(pageEl.querySelector(`.cs-main tr[data-k="${k}"]`))),
     foot: hOf(pageEl.querySelector('.cs-foot')),
-    bottom: hOf(pageEl.querySelector('.cs-bottom')),
+    bottom: hOf(pageEl.querySelector('.cs-bottom:not(.cont)')),
+    cont: hOf(pageEl.querySelector('.cs-bottom.cont')),
   };
   meas.remove();
 
@@ -377,7 +383,7 @@ export async function renderSheet(host: HTMLElement, d: SheetData): Promise<numb
     .map((rows, p) => {
       const isLast = p === list.length - 1;
       const fillH = cap - usedOf(rows) - (isLast ? tail : 0);
-      return `<article class="cs-page sheet" aria-label="ตารางเปรียบเทียบราคา หน้า ${p + 1}">${d.draft ? '<span class="cs-wm" aria-hidden="true">ร่าง · DRAFT</span>' : ''}${headerHtml(d, p + 1, total)}${mainTable(d, L, rows, isLast, fillH)}${isLast ? bottomHtml(d) : ''}</article>`;
+      return `<article class="cs-page sheet" aria-label="ตารางเปรียบเทียบราคา หน้า ${p + 1}">${d.draft ? '<span class="cs-wm" aria-hidden="true">ร่าง · DRAFT</span>' : ''}${headerHtml(d, p + 1, total)}${mainTable(d, L, rows, isLast, fillH)}${isLast ? bottomHtml(d) : bottomHtml(d, total)}</article>`;
     })
     .join('');
   // strike through the signature line of approvers not needed for this amount
