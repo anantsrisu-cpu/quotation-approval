@@ -18,7 +18,12 @@ export async function elementToPdf(el: HTMLElement): Promise<Blob> {
     const wide = landscape(list[i]);
     const W = wide ? 297 : 210;
     const H = wide ? 210 : 297;
-    const canvas = await html2canvas(list[i], { scale: 2, backgroundColor: '#ffffff', useCORS: true, logging: false });
+    const canvas = await html2canvas(list[i], {
+      scale: 2, backgroundColor: '#ffffff', useCORS: true, logging: false,
+      // on phones the sheet is shown scaled down (FitSheet): capture it at full size
+      windowWidth: Math.max(window.innerWidth, 1400),
+      onclone: (doc) => doc.querySelectorAll<HTMLElement>('.sheet-fit-inner').forEach((x) => { x.style.transform = 'none'; }),
+    });
     const img = canvas.toDataURL('image/jpeg', 0.92);
     const h = (canvas.height * W) / canvas.width;
     if (i > 0) pdf.addPage('a4', wide ? 'landscape' : 'portrait');

@@ -4,6 +4,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import { useRouter } from 'next/navigation';
 import { useApp } from './AppProvider';
 import { ApprovalDoc } from './ApprovalDoc';
+import { FitSheet } from './SheetViewer';
 import { Loading, Modal, PageHead } from './ui';
 import { blankComp, blankItem, calcItems, compDiscounts, compPrices, itemsOf, parseDays, type DraftComp, type DraftItem } from '@/lib/calc';
 import type { DeliverySlot } from '@/lib/types';
@@ -1157,7 +1158,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
 
       {modal === 'preview' && (
         <Modal title="ตัวอย่างร่างตารางเปรียบเทียบราคา · Draft preview" onClose={() => setModal(null)} wide>
-          <div className="letter-wrap"><ApprovalDoc r={previewRow} steps={previewSteps} draft /></div>
+          <div className="letter-wrap"><FitSheet title="ตัวอย่างร่างตารางเปรียบเทียบราคา"><ApprovalDoc r={previewRow} steps={previewSteps} draft /></FitSheet></div>
           <span className="note">ยังแก้ไขได้ หนังสือจริงจะสร้างและล็อกเมื่ออนุมัติครบ · Still editable; the real letter is locked after final approval</span>
         </Modal>
       )}

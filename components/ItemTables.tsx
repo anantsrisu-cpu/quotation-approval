@@ -64,8 +64,52 @@ export function ItemsTable({ r }: { r: RequestRow }) {
   const multi = !r.no_comp && (r.comparisons || []).length > 0;
   const hasDisc = bought.some((b) => b.disc);
   const span = hasDisc ? 8 : 6;
+  const cards = (
+    <div className="m-cards only-narrow" aria-label="รายการสินค้า · Items">
+      {items.map((it, i) => {
+        const b = bought[i];
+        const net = b.net;
+        const sp = splitOf(it);
+        const pct = aw[i] === 0 && it.prev_diff_pct != null ? it.prev_diff_pct : it.prev_price ? r2(((net - it.prev_price) / it.prev_price) * 100) : null;
+        return (
+          <div className="m-card" key={i}>
+            <div className="m-head">
+              <span className="m-no">{i + 1}</span>
+              <div className="m-name">
+                <b>{it.product_name || '—'}</b>
+                <div className="note"><span className="mono">{it.sku}</span>{it.brand ? ` · ${it.brand}` : ''}</div>
+              </div>
+            </div>
+            {it.description && <div className="note m-desc">{it.description}</div>}
+            <dl className="m-kv">
+              <div><dt>จำนวน</dt><dd>{fmtQty(it.qty)} {it.unit}</dd></div>
+              {sp.length ? <div><dt>ราคา/หน่วย</dt><dd>แบ่งซื้อ</dd></div> : <div><dt>ราคา/หน่วย ก่อน VAT</dt><dd>{fmt(b.unit)}{b.disc ? <span className="note"> ลด {b.disc} → <b>{fmt(net)}</b></span> : null}</dd></div>}
+              <div><dt>ราคาก่อนหน้า</dt><dd>{it.prev_price != null ? <>{fmt(it.prev_price)} <PrevPct pct={pct} /></> : <span className="note">—</span>}{(it.prev_vendor || it.prev_date) && <div className="note">{[it.prev_vendor, it.prev_date ? dOnly(it.prev_date) : ''].filter(Boolean).join(' · ')}</div>}</dd></div>
+              {it.report_no && <div><dt>เลขที่ใบขอซื้อ</dt><dd className="mono">{it.report_no}</dd></div>}
+            </dl>
+            {multi && (
+              <div className="m-won">
+                {sp.length
+                  ? <>✓ แบ่งซื้อ: {sp.map((x) => `เจ้าที่ ${x.v + 1} ${vendorOf(r, x.v)} ${x.qty.toLocaleString('en-US')} ${it.unit} (${x.pct}%)`).join(' + ')}</>
+                  : <>✓ ซื้อจาก เจ้าที่ {aw[i] + 1} · {b.vendor}</>}
+                {it.award_reason && <div className="m-bad">{sp.length ? 'เหตุผล' : 'ไม่ใช่ราคาต่ำสุด'}: {it.award_reason}</div>}
+              </div>
+            )}
+            <div className="m-total"><span>รวม ก่อน VAT</span><b className="num">{fmt(sp.length ? it.award_line ?? b.line : b.line)}</b></div>
+          </div>
+        );
+      })}
+      <div className="m-sum">
+        <div><span>{multi ? 'ยอดที่ขออนุมัติ ก่อน VAT (ตาม ✓)' : 'มูลค่ารวม ก่อน VAT'}</span><b className="num">{fmt(r.subtotal)}</b></div>
+        <div><span>VAT {Math.round((r.vat_rate || 0.07) * 100)}%</span><b className="num">{fmt(r.vat)}</b></div>
+        <div className="big"><span>ยอดรวมสุทธิ (บาท)</span><b className="num">{fmt(r.total)}</b></div>
+      </div>
+    </div>
+  );
   return (
-    <div className="tw">
+    <>
+    {cards}
+    <div className="tw only-wide">
       <table className="t" style={{ minWidth: hasDisc ? 900 : 720 }}>
         <thead>
           <tr>
@@ -123,6 +167,7 @@ export function ItemsTable({ r }: { r: RequestRow }) {
         </tfoot>
       </table>
     </div>
+    </>
   );
 }
 
@@ -135,7 +180,13 @@ export function CompareTable({ r }: { r: RequestRow }) {
   const rate = r.vat_rate || 0.07;
   const line1 = items.map((it) => it.line_total ?? r2(netOf(it) * it.qty));
   const sub1 = r2(line1.reduce((s, x) => s + x, 0));
-  const lineOf = (v: number, k: number) => (v === 0 ? line1[k] : boughtLine(r, items[k], k, v, n).line);
+  // a vendor's own line total; the ✓ vendor's line may be the server's award_line
+  const lineOf = (v: number, k: number) => {
+    if (v === 0) return line1[k];
+    if (aw[k] === v && !splitOf(items[k]).length) return boughtLine(r, items[k], k, v, n).line;
+    const c = comps[v - 1];
+    return c.lines?.[k] != null ? Number(c.lines[k]) : r2(compNets(c, n)[k] * items[k].qty);
+  };
   const partOf = (k: number, v: number) => splitOf(items[k]).find((x) => x.v === v);
   const isWon = (k: number, v: number) => (splitOf(items[k]).length ? !!partOf(k, v) : aw[k] === v);
   const byVendor = [0, ...comps.map((_, i) => i + 1)].map((v) =>
@@ -157,8 +208,74 @@ export function CompareTable({ r }: { r: RequestRow }) {
       </>
     );
   };
+  const vendors = [r.vendor, ...comps.map((c) => c.vendor)];
+  const vSub = [sub1, ...comps.map((c) => c.subtotal ?? null)];
+  const vTot = [r2(sub1 + r2(sub1 * rate)), ...comps.map((c) => c.total ?? null)];
+  const vMeta = [
+    { warranty: r.warranty, credit: r.credit_days, lead: r.lead_days, delivery: r.delivery, diff: null as number | null },
+    ...comps.map((c) => ({ warranty: c.warranty, credit: c.credit_days, lead: c.lead_days, delivery: c.delivery, diff: c.diff ?? null })),
+  ];
+  const priceOf = (v: number, k: number) => (v === 0
+    ? { price: items[k].unit_price, disc: normDiscount(items[k].discount), net: netOf(items[k]) }
+    : { price: compPrices(comps[v - 1])[k] || 0, disc: compDiscounts(comps[v - 1], n)[k], net: compNets(comps[v - 1], n)[k] });
+  const cards = (
+    <div className="m-cards only-narrow" aria-label="คู่เทียบราคา · Price comparison">
+      {items.map((it, k) => (
+        <div className="m-card" key={k}>
+          <div className="m-head">
+            <span className="m-no">{k + 1}</span>
+            <div className="m-name">
+              <b>{it.product_name || '—'}</b>
+              <div className="note"><span className="mono">{it.sku}</span> · {fmtQty(it.qty)} {it.unit}</div>
+            </div>
+          </div>
+          <ul className="m-vendors">
+            {vendors.map((vn, v) => {
+              const p = priceOf(v, k);
+              const won = isWon(k, v);
+              const part = partOf(k, v);
+              return (
+                <li key={v} className={won ? 'won' : ''}>
+                  <div className="m-vn"><span className="note">เจ้าที่ {v + 1}</span> {vn}</div>
+                  <div className="m-vp">
+                    {!(p.price > 0) ? <span className="note">ไม่ได้เสนอ</span> : (
+                      <>
+                        <span className="num">{p.disc ? <><span className="note">{fmt(p.price)} ลด {p.disc}</span> <b>{fmt(p.net)}</b></> : fmt(p.price)}<span className="note">/หน่วย</span></span>
+                        <span className="num m-line">= {fmt(lineOf(v, k))}</span>
+                      </>
+                    )}
+                    {won && <span className="m-ok">{part ? `✓ แบ่งซื้อ ${part.qty.toLocaleString('en-US')} (${part.pct}%)` : '✓ สั่งซื้อ'}</span>}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+          {it.award_reason && <div className="m-bad">{splitOf(it).length ? 'แบ่งซื้อ เหตุผล' : 'ไม่ใช่ราคาต่ำสุด'}: {it.award_reason}</div>}
+        </div>
+      ))}
+      <div className="m-card">
+        <b className="m-sub">สรุปแต่ละเจ้า · Per vendor</b>
+        {vendors.map((vn, v) => (
+          <div key={v} className={`m-vsum${byVendor[v] > 0 ? ' won' : ''}`}>
+            <div className="m-vn"><span className="note">เจ้าที่ {v + 1}</span> <b>{vn}</b></div>
+            <dl className="m-kv">
+              <div><dt>รวม ก่อน VAT</dt><dd className="num">{vSub[v] != null ? fmt(vSub[v]!) : '—'}</dd></div>
+              <div><dt>รวม VAT</dt><dd className="num"><b>{vTot[v] != null ? fmt(vTot[v]!) : '—'}</b></dd></div>
+              <div><dt>สั่งซื้อตาม ✓</dt><dd className="num" style={{ color: byVendor[v] > 0 ? 'var(--sage-ink)' : 'var(--muted)', fontWeight: 600 }}>{byVendor[v] > 0 ? `✓ ${fmt(byVendor[v])}` : '—'}</dd></div>
+              {v > 0 && <div><dt>ส่วนต่างเทียบเจ้าที่ 1</dt><dd className="num" style={{ color: (vMeta[v].diff || 0) >= 0 ? 'var(--sage-ink)' : 'var(--bad)', fontWeight: 600 }}>{vMeta[v].diff != null ? `${vMeta[v].diff! >= 0 ? '+' : '−'}${fmt(Math.abs(vMeta[v].diff!))}` : '—'}</dd></div>}
+              <div><dt>การรับประกัน</dt><dd>{vMeta[v].warranty || '—'}</dd></div>
+              <div><dt>เครดิต · Lead time</dt><dd>{daysText(vMeta[v].credit)} · {daysText(vMeta[v].lead)}</dd></div>
+              {vMeta[v].delivery?.some((x) => x.place) && <div><dt>สถานที่จัดส่ง</dt><dd><DeliveryText list={vMeta[v].delivery} /></dd></div>}
+            </dl>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
   return (
-    <div className="tw">
+    <>
+    {cards}
+    <div className="tw only-wide">
       <table className="t cmp" style={{ minWidth: 420 + comps.length * 130 }}>
         <thead>
           <tr>
@@ -236,5 +353,6 @@ export function CompareTable({ r }: { r: RequestRow }) {
         </tfoot>
       </table>
     </div>
+    </>
   );
 }

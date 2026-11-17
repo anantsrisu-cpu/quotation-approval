@@ -4,6 +4,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useApp } from '@/components/AppProvider';
 import { ApprovalDoc } from '@/components/ApprovalDoc';
+import { FitSheet } from '@/components/SheetViewer';
 import { SignaturePad, type PadHandle } from '@/components/SignaturePad';
 import { Chain, Chip, Loading, Modal } from '@/components/ui';
 import { PURP, SUBJ, dOnly, dt, fileSize, fmt } from '@/lib/format';
@@ -362,7 +363,9 @@ export default function RequestDetail() {
           {r.status === 'approved' ? 'อนุมัติครบแล้ว เอกสารล็อก แก้ไขไม่ได้ บันทึกเป็น PDF เท่านั้น · Locked; saved as PDF only' : 'ยังไม่อนุมัติครบ แสดงเป็นร่าง · Not fully approved — shown as draft'}
         </span>
         <div className="letter-wrap">
-          <ApprovalDoc ref={letterRef} r={r} steps={steps} draft={r.status !== 'approved'} rev={log.filter((l) => l.kind === 'reopened').length} />
+          <FitSheet title={`ตารางเปรียบเทียบราคา ${r.no || ''}`}>
+            <ApprovalDoc ref={letterRef} r={r} steps={steps} draft={r.status !== 'approved'} rev={log.filter((l) => l.kind === 'reopened').length} />
+          </FitSheet>
         </div>
       </div>
 
