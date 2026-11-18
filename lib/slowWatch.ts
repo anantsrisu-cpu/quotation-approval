@@ -44,6 +44,17 @@ export function startSlowWatch(report: typeof reportError = reportError) {
   const onVis = () => { visibleSince = document.visibilityState === 'visible' ? performance.now() : Infinity; };
   document.addEventListener('visibilitychange', onVis);
 
+  // the screen the person was on at each moment: reports arrive late, often after the app has moved
+  // to another page (e.g. saving a draft opens the list), so the page is looked up by the event's time
+  const paths: [number, string][] = [[0, location.pathname]];
+  const track = window.setInterval(() => {
+    if (location.pathname !== paths[paths.length - 1][1]) {
+      paths.push([performance.now(), location.pathname]);
+      if (paths.length > 30) paths.splice(1, 1);
+    }
+  }, 250);
+  const pathAt = (t: number) => paths.reduce((p, [at, path]) => (at <= t ? path : p), paths[0][1]);
+
   const ev = new PerformanceObserver((l) => {
     for (const e of l.getEntries() as PerformanceEventTiming[]) {
       if (sent >= MAX_REPORTS || e.duration < SLOW_MS) continue;
@@ -51,8 +62,6 @@ export function startSlowWatch(report: typeof reportError = reportError) {
       // one report per interaction (keydown + keypress + input share an id)
       const id = (e as PerformanceEventTiming & { interactionId?: number }).interactionId || Math.round(e.startTime);
       if (seen.has(id)) continue;
-      seen.add(id);
-      sent++;
       const delay = Math.round(e.processingStart - e.startTime);
       const run = Math.round(e.processingEnd - e.processingStart);
       const t = e.target as HTMLElement | null;
@@ -65,6 +74,12 @@ export function startSlowWatch(report: typeof reportError = reportError) {
       scripts.forEach((s) => { const k = who(s.sourceURL || ''); byWho[k] = (byWho[k] || 0) + s.duration; });
       const busyMs = Math.round(busy.reduce((a, f) => a + f.duration, 0));
       const scriptMs = Math.round(scripts.reduce((a, s) => a + s.duration, 0));
+      // dragging a file in from Windows (Explorer, Outlook, OneDrive, a zip) holds the browser while
+      // Windows prepares the file; the page has nothing to do with it, so it is not reported
+      // unless this app's own code was the slow part
+      if (/^drag/.test(e.name) && (byWho['แอปนี้ · this app'] || 0) < 200) continue;
+      seen.add(id);
+      sent++;
       const main = Object.entries(byWho).sort((a, b) => b[1] - a[1])[0]?.[0]
         || (lo ? 'เบราว์เซอร์/ระบบ (ไม่มีสคริปต์ของหน้าเว็บทำงานอยู่) · browser or OS' : 'ไม่ทราบ (เบราว์เซอร์ไม่รองรับการวัด) · unknown');
       const lines = [
@@ -74,16 +89,18 @@ export function startSlowWatch(report: typeof reportError = reportError) {
         `สาเหตุหลัก: ${main}`,
         ...Object.entries(byWho).map(([k, v]) => `  ${k}: ${Math.round(v)} ms`),
         ...scripts.map((s) => `  - ${Math.round(s.duration)} ms · ${s.invokerType || ''} ${s.invoker || ''} · ${(s.sourceURL || '(none)').replace(/\?.*$/, '')}${s.sourceFunctionName ? ' ' + s.sourceFunctionName : ''}${s.forcedStyleAndLayoutDuration ? ` · layout ${Math.round(s.forcedStyleAndLayoutDuration)} ms` : ''}`),
+        `หน้า · page: ${pathAt(e.startTime)}`,
         `hidden: ${document.visibilityState} · cores: ${navigator.hardwareConcurrency || '?'} · memory: ${(navigator as Navigator & { deviceMemory?: number }).deviceMemory || '?'} GB`,
       ];
       // the cause and the screen go in the title, so the admin can tell app bugs from extensions at a glance
-      report(`หน้าเว็บค้าง ${(e.duration / 1000).toFixed(1)} วินาที ขณะ ${e.name} · Page froze — ${main.split(' · ')[0]} · ${location.pathname}`, { action: 'slow-interaction', detail: lines.join('\n') });
+      report(`หน้าเว็บค้าง ${(e.duration / 1000).toFixed(1)} วินาที ขณะ ${e.name} · Page froze — ${main.split(' · ')[0]} · ${pathAt(e.startTime)}`, { action: 'slow-interaction', detail: lines.join('\n') });
     }
   });
   try {
     ev.observe({ type: 'event', durationThreshold: SLOW_MS, buffered: true } as PerformanceObserverInit);
   } catch {
+    window.clearInterval(track);
     return () => lo?.disconnect();
   }
-  return () => { ev.disconnect(); lo?.disconnect(); document.removeEventListener('visibilitychange', onVis); };
+  return () => { ev.disconnect(); lo?.disconnect(); window.clearInterval(track); document.removeEventListener('visibilitychange', onVis); };
 }
