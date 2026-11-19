@@ -1,10 +1,18 @@
 'use client';
 import { useEffect, useLayoutEffect, useRef } from 'react';
 import { useApp } from './AppProvider';
-import { compDiscounts, compNets, compPrices, itemsOf, netOf, normDiscount } from '@/lib/calc';
-import { dOnly, r2 } from '@/lib/format';
+import { compDiscounts, compNets, compPrices, itemsOf, netOf, normDiscount, vatModeOf } from '@/lib/calc';
+import { dOnly, fmt, r2 } from '@/lib/format';
 import { renderSheet, type SheetData, type SheetSigner, type SheetVendor } from '@/lib/compareSheet';
 import type { RequestRow, RequestStep } from '@/lib/types';
+
+/** 0021: printed under the item on the sheet and the request page */
+export function vatNote(it: { vat_mode?: string; price_in?: number; net_in?: number; discount?: string }): string {
+  const m = vatModeOf(it.vat_mode);
+  if (m === 'zero') return 'VAT 0 · รายการนี้ไม่มี VAT';
+  if (m === 'inc') return `ราคาเสนอรวม VAT${it.price_in != null ? ` ${fmt(it.price_in)}${it.net_in != null && it.net_in !== it.price_in ? ` (หลังส่วนลด ${fmt(it.net_in)})` : ''}` : ''} · ในตารางแปลงเป็นราคาก่อน VAT`;
+  return '';
+}
 
 /** Turn a request into the data of the landscape comparison sheet. */
 export function useSheetData(r: RequestRow, steps: RequestStep[], draft: boolean, rev: number): SheetData {
@@ -20,6 +28,9 @@ export function useSheetData(r: RequestRow, steps: RequestStep[], draft: boolean
   const line1 = items.map((it) => it.line_total ?? r2(netOf(it) * it.qty));
   // เจ้าที่ 1's whole quotation (r.subtotal is the amount approved = the ✓ lines)
   const sub1 = r2(line1.reduce((s, x) => s + x, 0));
+  // 0021: VAT only on items that have VAT
+  const zero = items.map((it) => vatModeOf(it.vat_mode) === 'zero');
+  const vat1 = r2(r2(line1.reduce((s, x, k) => s + (zero[k] ? 0 : x), 0)) * rate);
   const selected: SheetVendor = {
     name: r.vendor,
     unit: items.map((it) => it.unit_price),
@@ -27,8 +38,8 @@ export function useSheetData(r: RequestRow, steps: RequestStep[], draft: boolean
     net: items.map((it) => netOf(it)),
     line: line1,
     subtotal: sub1,
-    vat: r2(sub1 * rate),
-    total: r2(sub1 + r2(sub1 * rate)),
+    vat: vat1,
+    total: r2(sub1 + vat1),
     warranty: r.warranty || '',
     leadDays: r.lead_days ?? null,
     creditDays: r.credit_days ?? null,
@@ -38,7 +49,7 @@ export function useSheetData(r: RequestRow, steps: RequestStep[], draft: boolean
     const net = compNets(c, n);
     const line = items.map((it, k) => (c.lines && c.lines[k] != null ? Number(c.lines[k]) : r2(net[k] * it.qty)));
     const subtotal = c.subtotal ?? r2(line.reduce((s, x) => s + x, 0));
-    const total = c.total ?? r2(subtotal + r2(subtotal * (r.vat_rate || 0.07)));
+    const total = c.total ?? r2(subtotal + r2(r2(line.reduce((s, x, k) => s + (zero[k] ? 0 : x), 0)) * rate));
     return {
       name: c.vendor,
       unit: compPrices(c),
@@ -141,6 +152,7 @@ export function useSheetData(r: RequestRow, steps: RequestStep[], draft: boolean
       prevVendor: it.prev_vendor || '',
       prevDate: it.prev_date || null,
       reportNo: it.report_no || '',
+      vatNote: vatNote(it),
       award: award[k],
       split: splitOf(k).length ? splitOf(k) : null,
     })),

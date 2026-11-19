@@ -6,7 +6,7 @@ import { useApp } from './AppProvider';
 import { ApprovalDoc } from './ApprovalDoc';
 import { FitSheet } from './SheetViewer';
 import { Loading, Modal, PageHead } from './ui';
-import { blankComp, blankItem, calcItems, compDiscounts, compPrices, itemsOf, parseDays, type DraftComp, type DraftItem } from '@/lib/calc';
+import { VAT_MODES, blankComp, blankItem, calcItems, compDiscounts, compPrices, itemsOf, parseDays, vatModeOf, type DraftComp, type DraftItem } from '@/lib/calc';
 import type { DeliverySlot } from '@/lib/types';
 import { PR_EXAMPLE, PR_FORMAT, PURP, SUBJ, SUBJ_EN, fileSize, fmt, isPr, normPr, num } from '@/lib/format';
 import { UnitField } from './UnitField';
@@ -175,7 +175,9 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
       }
       const its = itemsOf(r);
       const items: DraftItem[] = its.length
-        ? its.map((it) => ({ sku: it.sku, description: it.description || '', qty: String(it.qty || 1), unit: it.unit || 'ชิ้น', unit_price: money(it.unit_price), discount: it.discount || '', prev_price: it.prev_price != null ? fmt(it.prev_price) : '', prev_vendor: it.prev_vendor || '', prev_date: it.prev_date || '', brand: it.brand || '', report_no: it.report_no || '',
+        ? its.map((it) => ({ sku: it.sku, description: it.description || '', qty: String(it.qty || 1), unit: it.unit || 'ชิ้น',
+            // 0021: an item quoted including VAT is edited as quoted
+            vat: vatModeOf(it.vat_mode), unit_price: money(vatModeOf(it.vat_mode) === 'inc' && it.price_in != null ? it.price_in : it.unit_price), discount: it.discount || '', prev_price: it.prev_price != null ? fmt(it.prev_price) : '', prev_vendor: it.prev_vendor || '', prev_date: it.prev_date || '', brand: it.brand || '', report_no: it.report_no || '',
             // keep a ✓ only where it differs from the automatic (cheapest) one
             award: it.award != null && it.award !== it.award_auto && !it.split?.length ? it.award : null, award_reason: it.award_reason || '',
             split: it.split?.length ? splitToDraft(it.split) : null }))
@@ -183,7 +185,8 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
       const comps: DraftComp[] = (r.comparisons || []).map((c) => {
         const ps = compPrices(c);
         const ds = compDiscounts(c, items.length);
-        return { vendor: c.vendor, prices: items.map((_, k) => money(ps[k])), discounts: ds, credit_days: c.credit_days != null ? String(c.credit_days) : '', lead_days: c.lead_days != null ? String(c.lead_days) : '', warranty: c.warranty || '', delivery: fixDelivery(c.delivery) };
+        const pin = c.prices_in || [];
+        return { vendor: c.vendor, prices: items.map((it, k) => money(it.vat === 'inc' && pin[k] != null ? pin[k] : ps[k])), discounts: ds, credit_days: c.credit_days != null ? String(c.credit_days) : '', lead_days: c.lead_days != null ? String(c.lead_days) : '', warranty: c.warranty || '', delivery: fixDelivery(c.delivery) };
       });
       const keepPreparer = draftId || r.preparer_id === me?.id || isAdmin;
       setD({
@@ -470,7 +473,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
   const rowItems = (): LineItem[] =>
     d.items.map((it, i) => ({
       sku: skuKey(it.sku), product_name: nameOf(it), description: it.description.trim(),
-      qty: c.lines[i].q, unit: it.unit, unit_price: c.lines[i].up, discount: it.discount.replace(/[\s,]/g, ''), prev_price: c.lines[i].prev,
+      qty: c.lines[i].q, unit: it.unit, unit_price: c.lines[i].up, vat_mode: c.modes[i], discount: it.discount.replace(/[\s,]/g, ''), prev_price: c.lines[i].prev,
       prev_vendor: it.prev_vendor.trim(), prev_date: it.prev_date || null, brand: it.brand.trim(), report_no: it.report_no.trim(),
       // only a ✓ moved away from the cheapest vendor is stored; the server ticks the cheapest itself
       award: c.awards[i]?.override && !c.awards[i].split ? c.awards[i].pick : null,
@@ -489,7 +492,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
       product_name: nameOf(d.items[0]) ? summaryName : '',
       qty: n === 1 ? items[0].qty : n,
       unit: n === 1 ? items[0].unit : 'รายการ',
-      unit_price: n === 1 ? c.lines[0].net : 0,
+      unit_price: n === 1 ? c.lines[0].netEx : 0,
       dept: d.dept || null,
       credit_days: parseDays(d.credit_days).days,
       lead_days: parseDays(d.lead_days).days,
@@ -688,17 +691,20 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
   };
   const previewRow: RequestRow = {
     id: id || 'draft', no, status: 'draft', preparer_id: d.preparer_id || me.id, created_by: me.id, subject_type: d.subject_type,
-    items: rowItems().map((it, i) => ({ ...it, product_name: it.product_name || '[ชื่อสินค้า]', net_price: c.lines[i].net, line_total: c.lines[i].line, prev_diff_pct: c.lines[i].pct,
+    items: rowItems().map((it, i) => ({ ...it, product_name: it.product_name || '[ชื่อสินค้า]',
+      // as the server stores them: before VAT, plus the prices as quoted for Incl. VAT items
+      unit_price: c.lines[i].upEx, net_price: c.lines[i].netEx, ...(c.modes[i] === 'inc' ? { price_in: c.lines[i].up, net_in: c.lines[i].net } : {}), line_total: c.lines[i].line, prev_diff_pct: c.lines[i].pct,
       award: c.awards[i].pick, award_auto: c.awards[i].best, award_line: c.awards[i].line, award_reason: c.awards[i].override ? d.items[i].award_reason : '',
       split: c.awards[i].split ? c.awards[i].split.map((x) => ({ v: x.v, qty: x.qty, line: x.line, pct: x.pct })) : null })),
     delivery: fixDelivery(d.delivery),
     credit_days: parseDays(d.credit_days).days, lead_days: parseDays(d.lead_days).days, warranty: d.warranty, report_no: d.report_no, report_date: d.report_date || null,
     sku: skuKey(d.items[0].sku), product_name: summaryName, qty: n === 1 ? c.lines[0].q : n, unit: n === 1 ? d.items[0].unit : 'รายการ',
-    unit_price: n === 1 ? c.lines[0].net : 0, subtotal: c.sub, vat: c.vat, total: c.total, vat_rate: vatRate, dept: d.dept, purpose: d.purpose,
+    unit_price: n === 1 ? c.lines[0].netEx : 0, subtotal: c.sub, vat: c.vat, total: c.total, vat_rate: vatRate, dept: d.dept, purpose: d.purpose,
     buyer_id: d.buyer_id, company_id: d.company_id, vendor: d.vendor || '[ผู้ขาย]', quote_no: d.quote_no,
     quote_date: d.quote_date, details: d.details,
     comparisons: d.no_comp ? [] : c.comps.map((x, ci) => ({
-      vendor: x.vendor, prices: x.lines.map((l) => l.up), discounts: d.comps[ci].discounts, nets: x.lines.map((l) => l.net),
+      vendor: x.vendor, prices: x.lines.map((l) => l.upEx), discounts: d.comps[ci].discounts, nets: x.lines.map((l) => l.netEx),
+      prices_in: x.lines.map((l, k) => (c.modes[k] === 'inc' ? l.up : null)), nets_in: x.lines.map((l, k) => (c.modes[k] === 'inc' ? l.net : null)),
       lines: x.lines.map((l) => l.line), subtotal: x.sub, total: x.total, diff: x.diff,
       credit_days: parseDays(d.comps[ci].credit_days).days, lead_days: parseDays(d.comps[ci].lead_days).days, warranty: d.comps[ci].warranty,
       delivery: fixDelivery(d.comps[ci].delivery),
@@ -881,18 +887,28 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
                     <label className="f" htmlFor={`unit${i}`}>หน่วย
                       <UnitField id={`unit${i}`} value={it.unit} onChange={(v) => setItem(i, { unit: v })} />
                     </label>
-                    <label className="f" htmlFor={`up${i}`}>ราคา/หน่วย <span className="req">*</span>
+                    <div className="f price-f">
+                      <label htmlFor={`up${i}`}>ราคา/หน่วย {L.mode === 'inc' ? '(รวม VAT)' : ''} <span className="req">*</span></label>
                       <input className="in r" inputMode="decimal" id={`up${i}`} value={it.unit_price} placeholder={d.multi_vendor ? 'ไม่ได้เสนอ' : '0.00'}
                         onChange={(e) => setItem(i, { unit_price: e.target.value })} onBlur={() => L.up > 0 && setItem(i, { unit_price: fmt(L.up) })}
                         onPaste={(e) => pasteDown(e, (k, v) => setItem(k, { unit_price: v }), i)} />
-                    </label>
+                      {/* 0021: how this item's prices were quoted (applies to every vendor's price of this item) */}
+                      <div className="vat-seg" role="radiogroup" aria-label={`ราคาของรายการที่ ${i + 1} · VAT`}>
+                        {VAT_MODES.map((m) => (
+                          <button key={m.v} type="button" role="radio" aria-checked={L.mode === m.v} id={`vat${i}-${m.v}`} className={L.mode === m.v ? 'on' : undefined}
+                            title={m.th} onClick={() => setItem(i, { vat: m.v })}>{m.label}</button>
+                        ))}
+                      </div>
+                      {L.mode === 'inc' && L.up > 0 && <span className="note vat-hint" id={`vh${i}`}>ก่อน VAT {fmt(L.netEx)} / หน่วย</span>}
+                      {L.mode === 'zero' && <span className="note vat-hint" id={`vh${i}`}>รายการนี้ไม่คิด VAT</span>}
+                    </div>
                     <label className="f" htmlFor={`disc${i}`}>ส่วนลด
                       <input className="in r" id={`disc${i}`} value={it.discount} placeholder="5% / 100" aria-invalid={!!L.discErr}
                         style={L.discErr ? { borderColor: 'var(--bad)' } : undefined}
                         onChange={(e) => setItem(i, { discount: e.target.value })}
                         onPaste={(e) => pasteDown(e, (k, v) => setItem(k, { discount: v }), i)} />
                     </label>
-                    <div className="f">รวม (ก่อน VAT)<div className="ro">{fmt(L.line)}</div></div>
+                    <div className="f">{L.mode === 'zero' ? 'รวม (ไม่มี VAT)' : 'รวม (ก่อน VAT)'}<div className="ro" id={`lt${i}`}>{fmt(L.line)}</div></div>
                   </div>
                   <div className="item-grid2">
                     <label className="f" htmlFor={`br${i}`}>Brand
@@ -960,7 +976,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
         <h2>จำนวนเงิน · Amount</h2>
         <div className="grid">
           <div className="f" style={{ fontSize: 14, fontWeight: 500 }}>ยอดที่ขออนุมัติ ก่อน VAT (ตามที่ติ๊ก ✓) · Subtotal<div className="ro">{fmt(c.sub)}</div></div>
-          <div className="f" style={{ fontSize: 14, fontWeight: 500 }}>VAT {Math.round(vatRate * 100)}%<div className="ro" style={{ fontWeight: 400 }}>{fmt(c.vat)}</div></div>
+          <div className="f" style={{ fontSize: 14, fontWeight: 500 }}>VAT {Math.round(vatRate * 100)}%{c.vatable !== c.sub && <span className="note" style={{ fontWeight: 400 }}> (คิดจาก {fmt(c.vatable)} · ไม่รวมรายการ VAT 0)</span>}<div className="ro" style={{ fontWeight: 400 }} id="f-vat">{fmt(c.vat)}</div></div>
           <div className="f" style={{ fontSize: 14, fontWeight: 500 }}>ยอดรวมสุทธิ (บาท) · Net total<div className="ro" style={{ fontSize: 17 }}>{fmt(c.total)}</div></div>
         </div>
         <div className="box num" style={{ borderStyle: 'solid', borderColor: 'var(--beige)' }}>
@@ -1049,6 +1065,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
                       <td className="note">{k + 1}</td>
                       <td>
                         <span className="mono" style={{ fontSize: 12 }}>{skuKey(it.sku) || '—'}</span><br />{nameOf(it) || <span className="note">—</span>}
+                        {c.modes[k] !== 'ex' && <div><span className={`chip vat-chip ${c.modes[k]}`}>{c.modes[k] === 'inc' ? 'ราคารวม VAT · ทุกเจ้า' : 'VAT 0'}</span></div>}
                         <div style={{ marginTop: 6 }}>
                           <button type="button" id={`sb${k}`} className={`btn sm${it.split ? ' on-split' : ''}`} aria-pressed={!!it.split} onClick={() => toggleSplit(k, !it.split)}
                             title="สั่งซื้อรายการนี้จากหลายเจ้า แบ่งจำนวนกัน">{it.split ? '✕ ยกเลิกแบ่งซื้อ' : '⇆ แบ่งซื้อ'}</button>
@@ -1058,6 +1075,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
                       <td className={`num sel${(a.split ? a.split.some((x) => x.v === 0) : a.pick === 0) ? ' won' : ''}`} style={{ textAlign: 'right' }}>
                         {d.multi_vendor && !(c.lines[k].up > 0) ? <span className="note">ไม่ได้เสนอ</span> : fmt(c.lines[k].up)}
                         {c.lines[k].hasDisc && <div className="note">ลด {normDisc(it.discount)} → {fmt(c.lines[k].net)}</div>}
+                        {c.modes[k] === 'inc' && c.lines[k].up > 0 && <div className="note">ก่อน VAT {fmt(c.lines[k].netEx)}</div>}
                         {c.lines[k].up > 0 && <div className="note">= {fmt(c.lines[k].line)}</div>}
                         {it.split ? splitCell(k, 0, a) : tick(k, 0, a)}
                       </td>
@@ -1072,7 +1090,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
                             onChange={(e) => setPrice(ci, k, e.target.value, 'discounts')}
                             onPaste={(e) => pasteDown(e, (m, v) => setPrice(ci, m, v, 'discounts'), k)} />
                           <div className="note num" style={{ textAlign: 'right', color: c.comps[ci]?.lines[k]?.discErr ? 'var(--bad)' : undefined }}>
-                            {c.comps[ci]?.lines[k]?.discErr || (c.comps[ci]?.lines[k]?.up > 0 && <>{c.comps[ci]?.lines[k]?.hasDisc && <>สุทธิ {fmt(c.comps[ci]?.lines[k]?.net)} · </>}= {fmt(c.comps[ci]?.lines[k]?.line)}</>)}
+                            {c.comps[ci]?.lines[k]?.discErr || (c.comps[ci]?.lines[k]?.up > 0 && <>{c.comps[ci]?.lines[k]?.hasDisc && <>สุทธิ {fmt(c.comps[ci]?.lines[k]?.net)} · </>}{c.modes[k] === 'inc' && <>ก่อน VAT {fmt(c.comps[ci]?.lines[k]?.netEx)} · </>}= {fmt(c.comps[ci]?.lines[k]?.line)}</>)}
                           </div>
                           {it.split ? splitCell(k, ci + 1, a) : tick(k, ci + 1, a)}
                         </td>

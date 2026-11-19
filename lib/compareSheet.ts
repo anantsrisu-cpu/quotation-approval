@@ -21,6 +21,8 @@ export interface SheetItem {
   prevVendor?: string;
   prevDate?: string | null; // yyyy-mm-dd
   reportNo?: string; // printed after the description
+  /** 0021: "ราคารวม VAT …" / "ไม่มี VAT" */
+  vatNote?: string;
   /** vendor ticked ✓ for this item (index into vendors) */
   award?: number | null;
   /** แบ่งซื้อ: quantity bought from each vendor (v = index into vendors) */
@@ -120,6 +122,7 @@ const CSS = `
 .cs-foot tr.aw td{background:#EAF3E6}
 .cs-main .sub{display:block;font-size:.82em;color:#555;white-space:normal}
 .cs-main .desc{white-space:pre-wrap;font-size:.9em;color:#333}
+.cs-main .desc.vat{font-style:italic;color:#6b3e1f}
 .cs-main tr.fill td{border-top:none}
 .cs-foot td{background:#FFFBE3}
 .cs-foot td.lbl{text-align:center;font-size:9.5px;font-weight:600}
@@ -230,7 +233,7 @@ function rowHtml(d: SheetData, k: number) {
     it.prevPrice != null
       ? `${money(it.prevPrice)}${it.prevVendor || it.prevDate ? `<span class="sub">${esc(it.prevVendor || '')}${it.prevVendor && it.prevDate ? ' / ' : ''}${esc(dmy(it.prevDate))}</span>` : ''}`
       : '';
-  return `<tr data-k="${k}"><td class="c">${k + 1}</td><td>${esc(it.sku)}</td><td>${esc(it.name)}${it.description ? `<div class="desc">${esc(it.description)}</div>` : ''}${it.reportNo ? `<div class="desc">เลขที่ใบขอซื้อ ${esc(it.reportNo)}</div>` : ''}</td>
+  return `<tr data-k="${k}"><td class="c">${k + 1}</td><td>${esc(it.sku)}</td><td>${esc(it.name)}${it.description ? `<div class="desc">${esc(it.description)}</div>` : ''}${it.reportNo ? `<div class="desc">เลขที่ใบขอซื้อ ${esc(it.reportNo)}</div>` : ''}${it.vatNote ? `<div class="desc vat">${esc(it.vatNote)}</div>` : ''}</td>
 <td>${esc(it.brand || '')}</td><td class="n">${qtyFmt(it.qty)}</td><td class="c">${esc(it.unit)}</td><td class="n" style="white-space:normal;text-align:right">${prev}</td>
 ${d.vendors
   .map((v, vi) => {

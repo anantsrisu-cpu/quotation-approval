@@ -1,5 +1,6 @@
 'use client';
-import { compDiscounts, compNets, compPrices, daysText, itemsOf, netOf, normDiscount } from '@/lib/calc';
+import { compDiscounts, compNets, compPrices, daysText, itemsOf, netOf, normDiscount, vatModeOf } from '@/lib/calc';
+import { vatNote } from './CompareSheet';
 import { dOnly, fmt, fmtQty, r2 } from '@/lib/format';
 import type { DeliverySlot, LineItem, RequestRow } from '@/lib/types';
 
@@ -81,6 +82,7 @@ export function ItemsTable({ r }: { r: RequestRow }) {
               </div>
             </div>
             {it.description && <div className="note m-desc">{it.description}</div>}
+            {vatNote(it) && <div className="note vat-note">{vatNote(it)}</div>}
             <dl className="m-kv">
               <div><dt>จำนวน</dt><dd>{fmtQty(it.qty)} {it.unit}</dd></div>
               {sp.length ? <div><dt>ราคา/หน่วย</dt><dd>แบ่งซื้อ</dd></div> : <div><dt>ราคา/หน่วย ก่อน VAT</dt><dd>{fmt(b.unit)}{b.disc ? <span className="note"> ลด {b.disc} → <b>{fmt(net)}</b></span> : null}</dd></div>}
@@ -136,6 +138,7 @@ export function ItemsTable({ r }: { r: RequestRow }) {
                   <span className="mono" style={{ fontSize: 12 }}>{it.sku}</span> · {it.product_name || '—'}
                   {it.brand && <span className="chip st-draft" style={{ marginLeft: 6 }}>{it.brand}</span>}
                   {it.description && <div className="note" style={{ whiteSpace: 'pre-wrap', color: 'var(--ink-2)' }}>{it.description}</div>}
+                  {vatNote(it) && <div className="note vat-note">{vatNote(it)}</div>}
                   {it.report_no && <div className="note" style={{ color: 'var(--ink-2)' }}>เลขที่ใบขอซื้อ {it.report_no}</div>}
                   {multi && (
                     <div className="note" style={{ color: 'var(--sage-ink)', fontWeight: 600 }}>
@@ -180,6 +183,8 @@ export function CompareTable({ r }: { r: RequestRow }) {
   const rate = r.vat_rate || 0.07;
   const line1 = items.map((it) => it.line_total ?? r2(netOf(it) * it.qty));
   const sub1 = r2(line1.reduce((s, x) => s + x, 0));
+  // 0021: VAT only on items that have VAT
+  const tot1 = r2(sub1 + r2(r2(line1.reduce((s, x, k) => s + (vatModeOf(items[k].vat_mode) === 'zero' ? 0 : x), 0)) * rate));
   // a vendor's own line total; the ✓ vendor's line may be the server's award_line
   const lineOf = (v: number, k: number) => {
     if (v === 0) return line1[k];
@@ -210,7 +215,7 @@ export function CompareTable({ r }: { r: RequestRow }) {
   };
   const vendors = [r.vendor, ...comps.map((c) => c.vendor)];
   const vSub = [sub1, ...comps.map((c) => c.subtotal ?? null)];
-  const vTot = [r2(sub1 + r2(sub1 * rate)), ...comps.map((c) => c.total ?? null)];
+  const vTot = [tot1, ...comps.map((c) => c.total ?? null)];
   const vMeta = [
     { warranty: r.warranty, credit: r.credit_days, lead: r.lead_days, delivery: r.delivery, diff: null as number | null },
     ...comps.map((c) => ({ warranty: c.warranty, credit: c.credit_days, lead: c.lead_days, delivery: c.delivery, diff: c.diff ?? null })),
@@ -312,7 +317,7 @@ export function CompareTable({ r }: { r: RequestRow }) {
           </tr>
           <tr>
             <td colSpan={3}><b>รวม VAT · Total</b></td>
-            <td className="num sel" style={R}><b>{fmt(r2(sub1 + r2(sub1 * rate)))}</b></td>
+            <td className="num sel" style={R}><b>{fmt(tot1)}</b></td>
             {comps.map((c, i) => <td key={i} className="num" style={R}><b>{c.total != null ? fmt(c.total) : '—'}</b></td>)}
           </tr>
           <tr>

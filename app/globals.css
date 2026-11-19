@@ -94,7 +94,7 @@ textarea.in{padding:10px 12px;resize:vertical;min-height:72px}
 .item{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--beige);border-radius:10px;padding:12px;background:#fff}
 .item-no{flex:none;width:28px;height:28px;border-radius:50%;background:var(--soft);border:1px solid var(--beige);display:grid;place-items:center;font-weight:600;font-size:13px;margin-top:28px;font-variant-numeric:tabular-nums}
 .item-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px}
-.item-grid{display:grid;grid-template-columns:minmax(140px,1.8fr) minmax(64px,.6fr) minmax(84px,.8fr) minmax(100px,1fr) minmax(90px,.9fr) minmax(100px,1fr);gap:8px}
+.item-grid{display:grid;grid-template-columns:minmax(140px,1.8fr) minmax(64px,.6fr) minmax(84px,.8fr) minmax(190px,1.1fr) minmax(90px,.9fr) minmax(100px,1fr);gap:8px}
 .item-grid .f{font-size:13px;white-space:nowrap}
 .item-grid2{display:grid;grid-template-columns:minmax(100px,1fr) minmax(100px,1fr) minmax(140px,1.5fr) minmax(130px,1fr) minmax(130px,1.1fr);gap:8px}
 @media (max-width:1180px){.item-grid2{grid-template-columns:repeat(3,minmax(0,1fr))}}
@@ -352,3 +352,16 @@ table.cmp tr.why.split td{background:var(--sage-bg)}
 .mnt-bar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;background:var(--warn-bg);border:1px solid var(--warn-line);color:var(--warn);border-radius:10px;padding:10px 14px;margin-bottom:14px}
 .mnt-bar.ok{background:var(--sage-bg);border-color:var(--sage);color:var(--sage-ink)}
 .handoff-note{color:var(--sage-ink);font-weight:500}
+
+/* 0021 VAT mode per item */
+.vat-seg{display:flex;margin-top:6px;border:1px solid var(--line);border-radius:8px;overflow:hidden;width:100%;max-width:240px}
+.vat-seg button{flex:1;font:inherit;font-size:12px;font-weight:500;padding:4px 6px;border:0;background:var(--surface);color:var(--ink-2,var(--muted));cursor:pointer;white-space:nowrap}
+.vat-seg button+button{border-left:1px solid var(--line)}
+.vat-seg button.on{background:var(--brown);color:#fff}
+.vat-seg button:focus-visible{outline:2px solid var(--brown);outline-offset:-2px}
+.vat-hint{display:block;margin-top:3px;font-weight:400}
+.vat-chip{font-size:11px;margin-top:4px}
+.vat-chip.inc{background:var(--soft);color:var(--brown)}
+.vat-chip.zero{background:var(--sage-bg);color:var(--sage-ink)}
+.vat-note{color:var(--brown);font-style:italic}
+@media (max-width:640px){.item-grid .price-f{grid-column:1/-1}.item-grid .price-f .vat-seg{max-width:none}}

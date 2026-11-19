@@ -82,7 +82,15 @@ export interface LineItem {
   split?: { v: number; qty: number; net?: number; line?: number; pct?: number }[] | null;
   line_total?: number;
   prev_diff_pct?: number | null;
+  /** 0021: how the prices of this item were quoted — ex = before VAT (default), inc = including VAT
+   *  (unit_price / net_price / line_total are then converted to before VAT), zero = no VAT on this item */
+  vat_mode?: VatMode;
+  /** inc: the prices as quoted (including VAT), kept for editing and for the sheet */
+  price_in?: number;
+  net_in?: number;
 }
+
+export type VatMode = 'ex' | 'inc' | 'zero';
 
 export interface Comparison {
   vendor: string;
@@ -98,6 +106,9 @@ export interface Comparison {
   delivery?: DeliverySlot[];
   /** line totals per item, filled by the server on submit */
   lines?: number[];
+  /** 0021: prices / nets as quoted for items whose prices include VAT (prices / nets are then before VAT) */
+  prices_in?: (number | null)[];
+  nets_in?: (number | null)[];
   /** older single-item requests */
   unit_price?: number;
   subtotal?: number;
