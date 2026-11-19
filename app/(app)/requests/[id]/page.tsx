@@ -198,7 +198,7 @@ export default function RequestDetail() {
           <p className="lead"><span className="mono">{r.no || 'ยังไม่ออกเลข'}</span> · {SUBJ[r.subject_type]} · {deptTh(r.dept)} · {dt(r.submitted_at || r.created_at)}</p>
         </div>
         <div className="row" style={{ gap: 10 }}>
-          {isPrep && ['draft', 'rejected'].includes(r.status) && <EditRequestButton r={r} />}
+          {(isPrep || (r.status === 'draft' && r.handoff && r.buyer_id === uid && has('preparer'))) && ['draft', 'rejected'].includes(r.status) && <EditRequestButton r={r} />}
           {isPrep && (has('preparer') || has('admin')) && <Link className="btn" href={`/requests/new?copy=${r.id}`}>ใช้เป็นแบบคำขอใหม่ · Copy to new</Link>}
           {(isPrep || has('admin')) && (r.status === 'pending' || r.status === 'draft') && (
             <button className="btn d" onClick={() => { setReason(''); setModal('cancel'); }}>ยกเลิกคำขอ · Cancel</button>

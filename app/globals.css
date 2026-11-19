@@ -341,3 +341,14 @@ table.cmp tr.why.split td{background:var(--sage-bg)}
 .m-ok{flex-basis:100%;color:var(--sage-ink);font-weight:700}
 .m-sub{font-size:15px}
 .m-vsum{border:1px solid var(--beige);border-radius:10px;padding:8px 10px;display:grid;gap:4px}
+
+/* 0019 maintenance mode */
+.mnt-overlay{position:fixed;inset:0;z-index:200;background:rgba(43,26,18,.72);display:grid;place-items:center;padding:16px;padding-top:max(16px,env(safe-area-inset-top,0px));overflow-y:auto}
+.mnt-card{background:var(--surface);border-radius:14px;border-top:6px solid var(--brown);max-width:520px;width:100%;padding:24px;display:flex;flex-direction:column;gap:12px;box-shadow:0 20px 50px rgba(0,0,0,.3)}
+.mnt-card h1{margin:0;font-size:24px;text-wrap:balance}
+.mnt-card .btn{align-self:flex-start}
+.mnt-icon{font-size:34px;line-height:1}
+.mnt-msg{margin:0;background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:10px 14px;font-weight:500;white-space:pre-wrap}
+.mnt-bar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;background:var(--warn-bg);border:1px solid var(--warn-line);color:var(--warn);border-radius:10px;padding:10px 14px;margin-bottom:14px}
+.mnt-bar.ok{background:var(--sage-bg);border-color:var(--sage);color:var(--sage-ink)}
+.handoff-note{color:var(--sage-ink);font-weight:500}

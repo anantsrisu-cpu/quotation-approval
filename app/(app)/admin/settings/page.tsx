@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useApp } from '@/components/AppProvider';
 import { AdminGate } from '@/components/AdminGate';
 import { PageHead } from '@/components/ui';
-import { fmt, num } from '@/lib/format';
+import { dt, fmt, num } from '@/lib/format';
 import type { Company, DeliveryPlace, Department, Position, Profile, Tier, UnitRow } from '@/lib/types';
 
 type TierEdit = Omit<Tier, 'id' | 'max_amount'> & { id?: number; max: string };
@@ -468,6 +468,55 @@ function Companies() {
 
 interface OutRow { id: number; to_emails: string[]; subject: string; status: string; error: string; created_at: string }
 
+/** ปิดปรับปรุงระบบ (SQL 0019): only admins can use the app while it is on. */
+function MaintenanceCard() {
+  const { sb, settings, run, toast, reloadRefs, uid } = useApp();
+  const ready = !!settings && 'maintenance' in settings; // SQL 0019 has been run
+  const on = !!settings?.maintenance;
+  const [msg, setMsg] = useState('');
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { setMsg(settings?.maintenance_msg || ''); }, [settings?.maintenance_msg]);
+
+  async function save(next: boolean) {
+    setBusy(true);
+    const { ok } = await run('save-maintenance', sb.from('app_settings').update({
+      maintenance: next, maintenance_msg: msg.trim().slice(0, 300), maintenance_at: next ? new Date().toISOString() : null, updated_at: new Date().toISOString(),
+    }).eq('id', 1));
+    setBusy(false);
+    if (!ok) return;
+    await reloadRefs();
+    toast('ok', next ? 'ปิดระบบเพื่อปรับปรุงแล้ว · Closed for maintenance' : 'เปิดระบบแล้ว · System reopened',
+      next ? 'ผู้ใช้ที่เปิดแอปอยู่จะเห็นหน้าปิดปรับปรุงภายใน 30 วินาที ข้อมูลที่เขากรอกค้างไว้ยังอยู่' : 'ผู้ใช้ใช้งานได้ตามปกติ (หน้าจอปิดปรับปรุงหายไปเองภายใน 30 วินาที)');
+  }
+
+  return (
+    <Section className="card">
+      <div className="actions" id="maintenance">
+        <h2>ปิดปรับปรุงระบบ · Maintenance mode {ready && <span className={`chip ${on ? 'st-bad' : 'st-ok'}`}>{on ? 'ปิดปรับปรุงอยู่ · Closed' : 'เปิดใช้งาน · Open'}</span>}</h2>
+      </div>
+      {!ready ? <div className="warn-box">รันไฟล์ SQL 0019 ใน Supabase ก่อน จึงจะใช้ส่วนนี้ได้ · Run SQL 0019 first.</div> : (
+        <>
+          <span className="note">ใช้ตอนอัปเดตระบบที่ต้องรัน SQL: ผู้ใช้ที่ไม่ใช่ผู้ดูแลจะเห็นหน้า “ระบบปิดปรับปรุงชั่วคราว” (ข้อมูลที่กรอกค้างไว้ยังอยู่บนหน้าจอ) และฐานข้อมูลจะไม่รับการบันทึก/ส่ง/อนุมัติจากผู้ใช้จนกว่าจะเปิดระบบ · ผู้ดูแลยังใช้งานและทดสอบได้ตามปกติ</span>
+          <label className="f" htmlFor="mnt-msg">ข้อความถึงผู้ใช้ (ไม่บังคับ) · Message to users
+            <input className="in" id="mnt-msg" maxLength={300} value={msg} placeholder="เช่น ปิดปรับปรุง 12:00–12:30 น. ขออภัยในความไม่สะดวก" onChange={(e) => setMsg(e.target.value)} />
+          </label>
+          <div className="row" style={{ gap: 10 }}>
+            {on ? (
+              <>
+                <button type="button" className="btn p" id="mnt-off" disabled={busy} onClick={() => save(false)}>เปิดระบบให้ใช้งาน · Reopen</button>
+                <button type="button" className="btn" id="mnt-msg-save" disabled={busy || msg.trim() === (settings?.maintenance_msg || '')} onClick={() => save(true)}>บันทึกข้อความ · Save message</button>
+              </>
+            ) : (
+              <button type="button" className="btn d" id="mnt-on" disabled={busy || !uid} onClick={() => save(true)}>🔧 ปิดระบบเพื่อปรับปรุง · Close for maintenance</button>
+            )}
+          </div>
+          {on && settings?.maintenance_at && <span className="note">ปิดตั้งแต่ {dt(settings.maintenance_at)}</span>}
+        </>
+      )}
+    </Section>
+  );
+}
+
 /** System switch, test and queue of notification e-mails (sent by the Edge Function send-emails through Microsoft 365). */
 function EmailNotify() {
   const { sb, settings, run, toast, reloadRefs, me } = useApp();
@@ -793,6 +842,7 @@ export default function SettingsPage() {
   return (
     <AdminGate>
       <PageHead title="ตั้งค่าระบบ" lead="Application settings — price tiers, approver positions, departments, companies, units, delivery places and letter details" />
+      <MaintenanceCard />
       <Tiers />
       <Positions />
       <ApproverCompanies />

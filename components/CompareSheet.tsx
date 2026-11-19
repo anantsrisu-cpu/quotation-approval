@@ -156,7 +156,8 @@ export function useSheetData(r: RequestRow, steps: RequestStep[], draft: boolean
         position: prep?.title || '',
         date: dOnly(r.submitted_at),
         signature: r.preparer_signature,
-        note: r.created_by && r.created_by !== r.preparer_id ? `จัดทำแทนโดย ${name(r.created_by)}` : '',
+        note: r.handed_from && r.handed_from !== r.preparer_id ? `ร่างโดย ${name(r.handed_from)}`
+          : r.created_by && r.created_by !== r.preparer_id ? `จัดทำแทนโดย ${name(r.created_by)}` : '',
       },
     ],
     draft,

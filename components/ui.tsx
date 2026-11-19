@@ -79,7 +79,8 @@ export function ReqTable({ list, empty, actions, company }: { list: RequestRow[]
                 <Link href={`/requests/${r.id}`} style={{ color: 'inherit', textDecoration: 'none' }}>
                   <b style={{ fontWeight: 500 }}>{SUBJ[r.subject_type]} · {r.product_name || r.sku || '—'}</b>
                 </Link>
-                <div className="note">{r.bought_vendors || r.vendor || '—'} · {name(r.preparer_id)}{r.created_by && r.created_by !== r.preparer_id ? ` · จัดทำแทนโดย ${name(r.created_by)}` : ''}</div>
+                <div className="note">{r.bought_vendors || r.vendor || '—'} · {name(r.preparer_id)}{r.handed_from && r.handed_from !== r.preparer_id ? ` · ร่างโดย ${name(r.handed_from)}` : r.created_by && r.created_by !== r.preparer_id ? ` · จัดทำแทนโดย ${name(r.created_by)}` : ''}</div>
+                {r.status === 'draft' && r.handoff && r.buyer_id && <div className="note handoff-note">↪ ส่งต่อให้ผู้ซื้อ {name(r.buyer_id)} · Handed to the buyer</div>}
               </td>
               <td className="num" style={{ textAlign: 'right' }}>{r.total ? fmt(r.total) : '—'}</td>
               <td>

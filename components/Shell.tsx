@@ -6,6 +6,7 @@ import { useApp } from './AppProvider';
 import { ROLE_TH, dt } from '@/lib/format';
 import { Loading } from './ui';
 import { InstallBanner, useCanInstall } from './Pwa';
+import { MaintenanceGate } from './Maintenance';
 
 function NavLink({ href, th, en, count, exact }: { href: string; th: string; en: string; count?: number; exact?: boolean }) {
   const path = usePathname();
@@ -267,6 +268,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
           </nav>
         )}
         <main className="main">
+          <MaintenanceGate />
           {active && <InstallBanner />}
           {children}
         </main>

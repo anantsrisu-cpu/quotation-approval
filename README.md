@@ -51,6 +51,7 @@ A quotation approval workflow. A preparer enters the request and attaches the qu
 - รอฉันอนุมัติ: ติ๊กเลือกบริษัทที่ส่งคำขอ · “ตัดสินใจล่าสุด” มีคอลัมน์บริษัท (ตัวย่อ)
 - คำขอที่มีเกิน 30 รายการ หน้าแบบฟอร์มแสดงทีละ 25 รายการ (มีปุ่มเปลี่ยนหน้า) เพื่อให้พิมพ์ได้ลื่นแม้มี 200 รายการ
 - บนมือถือ: หน้าคำขอแสดงรายการสินค้าและคู่เทียบราคาเป็นการ์ด (ไม่ต้องเลื่อนซ้ายขวา) · ตารางเปรียบเทียบราคาย่อให้พอดีจอ แตะเพื่อเปิดดูเต็มจอ ซูมด้วยปุ่ม 2 นิ้ว หรือแตะ 2 ครั้ง
+- **ส่งต่อร่างให้ผู้ซื้อ**: เลือก “ชื่อผู้ซื้อ” เป็นอีกคน (ต้องมีสิทธิ์ผู้จัดทำ) แล้วกด **บันทึกร่าง + ส่งต่อให้ผู้ซื้อ** → ผู้ซื้อได้รับแจ้งเตือน (และอีเมล ถ้าเปิดไว้) เห็นร่างในหน้า “คำขอของฉัน” เปิดแก้ไข แนบไฟล์ และกดส่งขออนุมัติเองได้ · เมื่อผู้ซื้อกดส่ง **ผู้ซื้อเป็นผู้จัดทำ** (ลายเซ็นของผู้ซื้อ) ใต้ช่องผู้จัดทำมีหมายเหตุ “ร่างโดย …” และคนที่ร่างยังเห็นคำขอและได้รับแจ้งเตือน · กด **ดึงร่างกลับ** หรือเปลี่ยนผู้ซื้อ = ยกเลิกการส่งต่อ · ผู้ซื้อลบร่างของคนอื่นไม่ได้ · ระหว่างส่งต่อ ทั้งสองคนแก้ร่างได้ (บันทึกล่าสุดชนะ ควรตกลงกันว่าใครแก้)
 - ตารางเปรียบเทียบราคาหลายหน้า: ช่องลายเซ็น (ผู้อนุมัติทุกลำดับ + ผู้จัดทำ) อยู่ท้ายทุกหน้า · ยอดรวม และหมายเหตุ อยู่หน้าสุดท้าย (หน้าอื่นเขียนว่า “ยอดรวมและหมายเหตุ อยู่ที่หน้า N/N”)
 
 **ผู้ดูแลระบบ · Admin**
@@ -97,6 +98,7 @@ Every state change goes through database functions, so amounts, approvers and si
    ต่อด้วย [`supabase/migrations/0016_wet_name_clear_products.sql`](supabase/migrations/0016_wet_name_clear_products.sql) กด **Run** (ชื่อผู้ลงนามของตำแหน่งลายเซ็นสด · ผู้ดูแลลบ SKU ทั้งหมดในคลิกเดียวก่อนอัปโหลดใหม่)
    ต่อด้วย [`supabase/migrations/0017_company_products_clear_notifs.sql`](supabase/migrations/0017_company_products_clear_notifs.sql) กด **Run** (รายการสินค้า SKU แยกตามบริษัท — SKU เดิมถูกคัดลอกให้ทุกบริษัท · ผู้ใช้ลบการแจ้งเตือนทั้งหมดของตัวเองได้)
    ต่อด้วย [`supabase/migrations/0018_email_notify_delete_dept.sql`](supabase/migrations/0018_email_notify_delete_dept.sql) กด **Run** (แจ้งเตือนทางอีเมล: การตั้งค่ารายบัญชี + คิวอีเมล · ลบฝ่ายที่ไม่มีการใช้งาน)
+   ต่อด้วย [`supabase/migrations/0019_buyer_handoff_maintenance.sql`](supabase/migrations/0019_buyer_handoff_maintenance.sql) กด **Run** (ส่งต่อร่างให้ผู้ซื้อ · สวิตช์ปิดปรับปรุงระบบ) — **รันก่อนเปิดเว็บเวอร์ชันนี้**
    > ระบบที่ใช้งานอยู่แล้ว: รันเฉพาะไฟล์ที่ยังไม่เคยรัน ตามลำดับเลข ข้อมูลเดิมถูกแปลงให้อัตโนมัติ และรันซ้ำได้โดยไม่เสียหาย
 4. ไปที่ **Project Settings → API** (หรือ **Data API / API Keys**) จดค่า:
    - **Project URL** → ใช้เป็น `NEXT_PUBLIC_SUPABASE_URL`
@@ -177,6 +179,11 @@ update public.profiles set roles = '{admin,preparer}', status = 'active' where e
 - ทดสอบก่อนขึ้นจริง: สร้าง branch / Pull Request → Vercel ทำลิงก์ **Preview** ให้ทดลองก่อน merge
 - ถ้าเวอร์ชันใหม่มีปัญหา: Vercel → Deployments → เลือกเวอร์ชันก่อนหน้า → **Promote to Production** (ย้อนกลับได้ในไม่กี่วินาที)
 - การเปลี่ยนโครงสร้างฐานข้อมูล ให้เพิ่มไฟล์ใหม่ใน `supabase/migrations/` (เช่น `0003_xxx.sql`) แล้วรันใน SQL Editor — **อย่าแก้ไฟล์เก่าที่รันไปแล้ว**
+
+**ปิดปรับปรุงระบบ · Maintenance mode** (SQL 0019) — ผู้ดูแลระบบ → ตั้งค่าระบบ → **ปิดปรับปรุงระบบ**
+- อัปเดตที่**มีแต่โค้ด** (ไม่มีไฟล์ SQL): ไม่ต้องปิดระบบ Vercel สร้างเวอร์ชันใหม่เบื้องหลัง แล้วสลับให้ทันทีเมื่อพร้อม ไม่มีช่วงล่ม ผู้ใช้ที่เปิดหน้าอยู่ใช้เวอร์ชันเดิมต่อจนกว่าจะรีเฟรช
+- อัปเดตที่**มีไฟล์ SQL** ให้ปิดระบบก่อน ตามลำดับ: 1) ใส่ข้อความถึงผู้ใช้ (เช่น “ปิดปรับปรุง 12:00–12:30 น.”) แล้วกด **ปิดระบบเพื่อปรับปรุง** → ภายใน 30 วินาที ผู้ใช้ที่ไม่ใช่ผู้ดูแลเห็นหน้า “ระบบปิดปรับปรุงชั่วคราว” ทับหน้าที่เปิดอยู่ (ข้อมูลที่กรอกค้างไว้ยังอยู่) และฐานข้อมูลไม่รับการบันทึก/ส่ง/อนุมัติจากผู้ใช้ 2) รัน SQL ใน Supabase 3) merge/push โค้ด รอ Vercel ขึ้น **Ready** 4) ผู้ดูแลทดสอบ (ผู้ดูแลยังใช้งานได้ปกติ) 5) กด **เปิดระบบให้ใช้งาน** → หน้าปิดปรับปรุงหายเอง ผู้ใช้เห็นแถบ “ระบบเปิดใช้งานแล้ว” พร้อมปุ่มโหลดหน้าใหม่
+- ทางเลือกอื่น (ไม่แนะนำสำหรับงานประจำ): Vercel → Settings → General → **Pause Project** ปิดเว็บทั้งหมดรวมทั้งผู้ดูแล (ผู้ใช้เห็น error 503 DEPLOYMENT_PAUSED ทดสอบไม่ได้ และกลับมาใช้ได้ภายในไม่กี่นาทีหลังกด Resume) · Supabase Pause project ไม่แนะนำ (ใช้เวลานานในการเปิดกลับ)
 - อัปเดตแพ็กเกจเพื่อความปลอดภัยทุก 1–3 เดือน: `npm outdated`, `npm audit`, แล้วอัปเดต Next.js เป็นเวอร์ชันแพตช์ล่าสุดของ 15.5.x
 
 **ติดตามความเร็วและปัญหา · Watching speed and problems**
@@ -243,6 +250,7 @@ psql -d qa_test -v ON_ERROR_STOP=1 -f supabase/tests/95_pr_number_test.sql      
 psql -d qa_test -v ON_ERROR_STOP=1 -f supabase/tests/96_wet_name_clear_products_test.sql  # runs 0016 itself; ends with: ALL 0016 TESTS PASSED
 psql -d qa_test -v ON_ERROR_STOP=1 -f supabase/tests/97_company_products_test.sql       # runs 0017 itself; ends with: ALL 0017 TESTS PASSED
 psql -d qa_test -v ON_ERROR_STOP=1 -f supabase/tests/98_email_notify_delete_dept_test.sql  # runs 0018 itself; ends with: ALL 0018 TESTS PASSED
+psql -d qa_test -v ON_ERROR_STOP=1 -f supabase/tests/99_buyer_handoff_maintenance_test.sql # runs 0019 itself; ends with: ALL 0019 TESTS PASSED
 ```
 ครอบคลุม · Covers: first admin, applications, self-promotion blocked, server-side amounts and tiers, approver resolution by department, signatures required, forward rules, reject → reopen → resend (keeps number), admin remind/reassign/cancel, letter path rules, visibility for outsiders, disabled accounts.
 

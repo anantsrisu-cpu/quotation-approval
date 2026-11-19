@@ -39,6 +39,10 @@ export interface Settings {
   request_prefix: string;
   /** admin switch: send notification e-mails (0018) */
   email_enabled?: boolean;
+  /** 0019: closed for maintenance (only admins can use the app) */
+  maintenance?: boolean;
+  maintenance_msg?: string;
+  maintenance_at?: string | null;
 }
 export interface Position { code: string; th: string; en: string; sort: number; note?: string; sign_mode?: 'online' | 'wet'; wet_name?: string }
 /** One approver position on the comparison sheet, saved when the request is sent. */
@@ -160,6 +164,9 @@ export interface RequestRow {
   tier_label: string;
   current_step: number;
   preparer_signature?: string | null;
+  /** 0019: handed to the buyer (draft only) · who drafted it when the buyer sent it */
+  handoff?: boolean;
+  handed_from?: string | null;
   created_at: string;
   updated_at?: string;
   submitted_at: string | null;

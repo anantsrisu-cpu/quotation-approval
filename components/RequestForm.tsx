@@ -135,6 +135,9 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
   const [dragging, setDragging] = useState(false);
   const [message, setMessage] = useState('');
   const [tried, setTried] = useState(false);
+  /** 0019: the buyer the draft is handed to (null = not handed); asBuyer = I am that buyer, opening someone else's draft */
+  const [handedTo, setHandedTo] = useState<string | null>(null);
+  const [asBuyer, setAsBuyer] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
 
   // load an existing draft, or copy fields from an earlier request
@@ -149,7 +152,8 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
         return;
       }
       const r = data as RequestRow;
-      if (draftId && (r.status !== 'draft' || (r.preparer_id !== me?.id && r.created_by !== me?.id))) {
+      const buyerCopy = !!r.handoff && r.buyer_id === me?.id && r.preparer_id !== me?.id && r.created_by !== me?.id && has('preparer');
+      if (draftId && (r.status !== 'draft' || (r.preparer_id !== me?.id && r.created_by !== me?.id && !buyerCopy))) {
         router.replace(`/requests/${r.id}`);
         return;
       }
@@ -179,6 +183,8 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
         no_comp: r.no_comp, no_comp_reason: r.no_comp_reason, low_reason: r.low_reason, multi_vendor: !!r.multi_vendor,
       });
       if (draftId) {
+        setHandedTo(r.handoff ? r.buyer_id : null);
+        setAsBuyer(buyerCopy);
         setNo(r.no);
         setMessage(r.message || '');
         const f = await sb.from('request_files').select('*').eq('request_id', r.id).order('id');
@@ -389,7 +395,11 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
   );
   const firstName = nameOf(d.items[0]) || '[ชื่อสินค้า]';
   const summaryName = firstName + (n > 1 ? ` และอีก ${n - 1} รายการ` : '');
-  const proxy = d.preparer_id !== me.id;
+  const proxy = d.preparer_id !== me.id && !asBuyer;
+  // 0019: hand the draft to the buyer (another person, who must have the preparer role)
+  const buyerOther = !asBuyer && !!d.buyer_id && d.buyer_id !== d.preparer_id;
+  const buyerCanPrep = !!people[d.buyer_id]?.roles.includes('preparer') && people[d.buyer_id]?.status === 'active';
+  const handed = !!handedTo && handedTo === d.buyer_id;
   const preparers = Object.values(people).filter((p) => p.status === 'active' && p.roles.includes('preparer'));
 
   const vendorName = (v: number) => (v === 0 ? d.vendor.trim() || 'ผู้ขาย 1' : d.comps[v - 1]?.vendor.trim() || `คู่เทียบ ${v}`);
@@ -498,6 +508,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
     }
     if (id) {
       const { ok } = await run('save-draft', sb.from('requests').update({ ...row(), updated_at: new Date().toISOString() }).eq('id', id));
+      if (ok && handedTo && handedTo !== d.buyer_id) setHandedTo(null);
       if (ok && !silent) toast('ok', 'บันทึกร่างแล้ว · Draft saved', 'กลับมาแก้ไขได้จากหน้าคำขอของฉัน · Continue from My requests');
       return ok ? id : null;
     }
@@ -573,6 +584,23 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
       toast('ok', 'ลบฉบับร่างแล้ว · Draft deleted', '');
       router.push('/requests');
     }
+  }
+
+  /** 0019: save, then let the buyer open, edit and send this draft (or take it back) */
+  async function handOver(on: boolean) {
+    if (!d) return;
+    setBusy('handoff');
+    const rid = await saveDraft(true);
+    if (!rid) {
+      setBusy(null);
+      return;
+    }
+    const { ok } = await run('set_draft_handoff', sb.rpc('set_draft_handoff', { p_id: rid, p_on: on }));
+    setBusy(null);
+    if (!ok) return;
+    setHandedTo(on ? d.buyer_id : null);
+    toast('ok', on ? 'บันทึกร่างและส่งต่อแล้ว · Handed to the buyer' : 'ดึงร่างกลับแล้ว · Taken back',
+      on ? `${name(d.buyer_id)} ได้รับแจ้งเตือน เปิดแก้ไขและกดส่งขออนุมัติได้ (เมื่อส่ง ผู้ซื้อเป็นผู้จัดทำ)` : `${name(d.buyer_id)} แก้ไขร่างนี้ไม่ได้แล้ว`);
   }
 
   const online = approvers.filter((a) => a.sign_mode !== 'wet');
@@ -654,6 +682,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
       if (a.sign_mode === 'wet') return { position: p.code, mode: 'wet' as const, approver_id: a.approver_id };
       return { position: p.code, mode: 'online' as const, step_no: online.indexOf(a) };
     }),
+    ...(asBuyer ? { preparer_id: me.id, handed_from: d.preparer_id } : {}),
     tier_label: approvers[0]?.tier_label || '', current_step: 0, preparer_signature: null, created_at: new Date().toISOString(),
     submitted_at: null, step_since: null, completed_at: null, letter_path: null, letter_at: null,
   };
@@ -678,7 +707,13 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
       </PageHead>
 
       <form className="card" noValidate onSubmit={(e) => e.preventDefault()}>
-        {isAdmin && (
+        {asBuyer && (
+          <div className="ok-box" id="handoff-banner" role="status">
+            <b>ร่างนี้ส่งต่อมาจาก {name(d.preparer_id)} · Handed to you by {name(d.preparer_id)}</b><br />
+            แก้ไขได้ตามต้องการ แล้วกด “ถัดไป: ตรวจผู้อนุมัติและส่ง” · เมื่อส่ง <b>คุณจะเป็นผู้จัดทำ</b> (ใช้ลายเซ็นของคุณ) และใต้ช่องผู้จัดทำจะมีหมายเหตุ “ร่างโดย {name(d.preparer_id)}”
+          </div>
+        )}
+        {isAdmin && !asBuyer && (
           <div className="box" style={{ borderStyle: 'solid', borderColor: 'var(--tan)', background: 'var(--soft)' }}>
             <label className="f" htmlFor="f-prep">ผู้จัดทำ (ผู้ดูแลร่างแทนได้) · Preparer — admins may prepare on behalf of someone <span className="req">*</span>
               <select className="in" id="f-prep" value={d.preparer_id} onChange={(e) => set('preparer_id', e.target.value)}>
@@ -743,10 +778,15 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
             <span className="note" style={{ fontWeight: 400 }}>ว่างไว้ = วันที่อนุมัติครบในระบบ</span>
           </label>
           <label className="f" htmlFor="f-buyer">ชื่อผู้ซื้อ · Buyer name <span className="req">*</span>
-            <select className="in" id="f-buyer" value={d.buyer_id} onChange={(e) => set('buyer_id', e.target.value)}>
+            <select className="in" id="f-buyer" value={d.buyer_id} disabled={asBuyer} onChange={(e) => set('buyer_id', e.target.value)}>
               <option value="">— เลือกผู้ซื้อ · Select —</option>
               {activePeople.map((p) => <option key={p.id} value={p.id}>{p.name || p.email} · {deptTh(p.dept)}</option>)}
             </select>
+            {buyerOther && (handed
+              ? <span className="note" style={{ fontWeight: 400, color: 'var(--ok)' }}>✓ ส่งต่อให้ {name(d.buyer_id)} แล้ว · Handed over</span>
+              : buyerCanPrep
+                ? <span className="note" style={{ fontWeight: 400 }}>กด “บันทึกร่าง + ส่งต่อให้ผู้ซื้อ” ด้านล่าง เพื่อให้ {name(d.buyer_id)} เปิดแก้ไขและส่งขออนุมัติเองได้</span>
+                : <span className="note" style={{ fontWeight: 400 }}>ผู้ซื้อคนนี้ไม่มีสิทธิ์ผู้จัดทำ จึงรับร่างไปส่งต่อไม่ได้ · No preparer role</span>)}
           </label>
           <label className="f" htmlFor="f-company">ชื่อบริษัทผู้ซื้อ · Buyer company <span className="req">*</span>
             <select className="in" id="f-company" value={d.company_id} onChange={(e) => set('company_id', e.target.value)}>
@@ -1138,8 +1178,11 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
         <div className="actions" style={{ borderTop: '1px solid var(--line)', paddingTop: 16 }}>
           <div className="row" style={{ gap: 10 }}>
             <button type="button" className="btn" disabled={!!busy} onClick={() => saveDraft()}>บันทึกร่าง · Save draft</button>
+            {buyerOther && buyerCanPrep && (handed
+              ? <button type="button" className="btn o" id="handoff-back" disabled={!!busy} onClick={() => handOver(false)}>↩ ดึงร่างกลับจาก {name(d.buyer_id)} · Take back</button>
+              : <button type="button" className="btn o" id="handoff" disabled={!!busy} onClick={() => handOver(true)}>{busy === 'handoff' ? 'กำลังส่งต่อ…' : `บันทึกร่าง + ส่งต่อให้ผู้ซื้อ (${name(d.buyer_id)}) · Hand to buyer`}</button>)}
             <button type="button" className="btn o" onClick={() => setModal('preview')}>ดูตัวอย่างร่าง · Preview draft</button>
-            {id && !no && <button type="button" className="btn d" disabled={!!busy} onClick={() => setModal('delete')}>ลบร่าง · Delete draft</button>}
+            {id && !no && !asBuyer && <button type="button" className="btn d" disabled={!!busy} onClick={() => setModal('delete')}>ลบร่าง · Delete draft</button>}
           </div>
           <button
             type="button"
@@ -1168,6 +1211,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
           <div className="box" style={{ borderStyle: 'solid' }}>
             <b>{SUBJ[d.subject_type]} · {summaryName}</b>
             {proxy && <div className="note">ผู้จัดทำ {name(d.preparer_id)} · จัดทำแทนโดย {me.name}</div>}
+            {asBuyer && <div className="note" id="handoff-send-note">ผู้จัดทำ: คุณ ({me.name}) · ร่างโดย {name(d.preparer_id)}</div>}
             <div className="num">ยอดรวม {fmt(c.total)} บาท · {approvers[0]?.tier_label}</div>
           </div>
           <ol style={{ margin: 0, paddingLeft: 20 }}>
