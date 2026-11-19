@@ -4,7 +4,7 @@ import { useApp } from '@/components/AppProvider';
 import { AdminGate } from '@/components/AdminGate';
 import { PageHead } from '@/components/ui';
 import { dt, fmt, num } from '@/lib/format';
-import { sheetCompanies, type Company, type DeliveryPlace, type Department, type Position, type Profile, type Tier, type UnitRow } from '@/lib/types';
+import type { Company, DeliveryPlace, Department, Position, Profile, Tier, UnitRow } from '@/lib/types';
 
 type TierEdit = Omit<Tier, 'id' | 'max_amount'> & { id?: number; max: string };
 const slug = (s: string) => s.trim().toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
@@ -401,7 +401,6 @@ function Companies() {
   useEffect(() => setRows(companies.map((c) => ({ ...c }))), [companies]);
   // 0022: sheet header groups (only once that SQL has been run)
   const grouped = companies.some((c) => 'sheet_group' in c);
-  const groupNames = [...new Set(rows.map((c) => (c.sheet_group || '').trim()).filter(Boolean))];
   async function save() {
     const fixed = rows.map((c) => ({ ...c, id: c.isNew ? slug(c.id || c.en || '') : c.id }));
     if (fixed.some((c) => !c.id || !c.th.trim())) return toast('bad', 'กรอกรหัส (อังกฤษ) และชื่อบริษัทให้ครบ · Code and Thai name required', '');
@@ -443,12 +442,7 @@ function Companies() {
           <button className="btn p sm" onClick={save}>บันทึก · Save</button>
         </div>
       </div>
-      {grouped ? (
-        <span className="note">หัวตารางเปรียบเทียบแสดงช่องติ๊กของบริษัทที่อยู่ <b>กลุ่มหัวตารางเดียวกัน</b> กับบริษัทผู้ซื้อ (บริษัทผู้ซื้อถูกติ๊ก ✓ และใช้โลโก้ของบริษัทนั้น) · ตั้งชื่อกลุ่มเหมือนกัน = รวมในแบบฟอร์มเดียว · ตั้งชื่อกลุ่มต่างกันหรือเว้นว่าง = แบบฟอร์มแยกของบริษัทนั้น · มีผลกับตารางที่สร้างใหม่ (PDF ที่อนุมัติแล้วไม่เปลี่ยน) · Companies in the same sheet group share one header.</span>
-      ) : (
-        <span className="note">บริษัทที่เปิดใช้งานแสดงเป็นช่องติ๊กในหัวตารางเปรียบเทียบ บริษัทผู้ซื้อของคำขอถูกติ๊ก ✓ และใช้โลโก้ของบริษัทนั้น · รัน SQL 0022 เพื่อแยก/รวมหัวตารางตามกลุ่มบริษัท</span>
-      )}
-      {grouped && groupNames.length > 0 && <datalist id="sheet-groups">{groupNames.map((g) => <option key={g} value={g} />)}</datalist>}
+      <span className="note">บริษัทผู้ซื้อของคำขอถูกติ๊ก ✓ ในหัวตารางเปรียบเทียบ และใช้โลโก้ของบริษัทนั้น · {grouped ? 'แยก/รวมบริษัทในหัวตารางได้ที่การ์ด “แยก / รวมบริษัทในหัวตาราง” ด้านล่าง' : 'รัน SQL 0022 เพื่อแยก/รวมบริษัทในหัวตาราง'}</span>
       {rows.map((c, i) => {
         const url = logoUrl(c);
         return (
@@ -469,24 +463,81 @@ function Companies() {
               <label className="f">ชื่อ (ไทย)<input className="in" value={c.th} onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, th: e.target.value } : x)))} /></label>
               <label className="f">ชื่อ (อังกฤษ)<input className="in" value={c.en} onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, en: e.target.value } : x)))} /></label>
               <label className="f span2">ที่อยู่ · Address<input className="in" value={c.address} onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, address: e.target.value } : x)))} /></label>
-              {grouped && (
-                <label className="f">กลุ่มหัวตาราง · Sheet group
-                  <input className="in" id={`sg-${i}`} list="sheet-groups" maxLength={60} value={c.sheet_group || ''} placeholder="เว้นว่าง = แบบฟอร์มแยก"
-                    onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, sheet_group: e.target.value } : x)))} />
-                </label>
-              )}
             </div>
-            {grouped && c.th.trim() && (
-              <div className="note sg-preview" id={`sgp-${i}`}>
-                หัวตารางเมื่อซื้อในนามบริษัทนี้:{' '}
-                {sheetCompanies(rows.map((x, j) => ({ ...x, id: x.id || `new-${j}` })), c.id || `new-${i}`).map((x) => (
-                  <span key={x.id} className={x.id === (c.id || `new-${i}`) ? 'on' : undefined}>{x.id === (c.id || `new-${i}`) ? '☑' : '☐'} {x.th || '—'}</span>
-                ))}
-              </div>
-            )}
           </div>
         );
       })}
+    </Section>
+  );
+}
+
+/** 0022: แยก / รวมบริษัทในหัวตารางเปรียบเทียบ — one box per sheet header, buttons to split and merge (saved at once). */
+function SheetGroups() {
+  const { sb, companies, run, toast, reloadRefs } = useApp();
+  const [busy, setBusy] = useState(false);
+  if (!companies.some((c) => 'sheet_group' in c)) return null; // SQL 0022 not run yet
+  const key = (c: Company) => (c.sheet_group || '').trim().toLowerCase() || `#${c.id}`;
+  const forms: Company[][] = [];
+  companies.filter((c) => c.active).forEach((c) => {
+    const f = forms.find((g) => key(g[0]) === key(c));
+    if (f) f.push(c);
+    else forms.push([c]);
+  });
+  const short = (c: Company) => c.th.replace(/^บริษัท\s*/, '').replace(/\s*จำกัด.*$/, '');
+
+  async function apply(changes: { id: string; sheet_group: string }[], msg: string) {
+    setBusy(true);
+    let ok = true;
+    for (const ch of changes) {
+      const res = await run('save-sheet-group', sb.from('companies').update({ sheet_group: ch.sheet_group }).eq('id', ch.id));
+      ok = ok && res.ok;
+    }
+    setBusy(false);
+    if (ok) {
+      toast('ok', msg, 'มีผลกับตารางเปรียบเทียบที่สร้างหลังจากนี้ · PDF ที่อนุมัติแล้วไม่เปลี่ยน');
+      reloadRefs();
+    }
+  }
+  /** company c gets a sheet header of its own */
+  const split = (c: Company) => apply([{ id: c.id, sheet_group: '' }], `แยก ${short(c)} เป็นแบบฟอร์มเดี่ยวแล้ว · Split out`);
+  /** every company of form `from` joins form `to` */
+  const merge = (from: Company[], to: Company[]) => {
+    const name = (to[0].sheet_group || '').trim() || `กลุ่ม ${to[0].en || to[0].id}`.slice(0, 60);
+    const ids = [...(to[0].sheet_group?.trim() ? [] : [to[0]]), ...from];
+    apply(ids.map((c) => ({ id: c.id, sheet_group: name })), `รวม ${from.map(short).join(', ')} เข้ากับแบบฟอร์มของ ${short(to[0])} แล้ว · Merged`);
+  };
+
+  return (
+    <Section className="card">
+      <div className="actions" id="sheet-groups"><h2>แยก / รวมบริษัทในหัวตาราง · Sheet headers</h2></div>
+      <span className="note">แต่ละกล่อง = หัวตารางเปรียบเทียบ 1 แบบฟอร์ม · กด <b>แยกออก</b> ให้บริษัทนั้นมีแบบฟอร์มของตัวเอง · เลือก <b>รวมกับแบบฟอร์ม…</b> เพื่อรวมทั้งกล่องเข้ากับอีกแบบฟอร์ม · บันทึกทันที · Split a company out or merge two headers; saved at once.</span>
+      <div className="sg-forms">
+        {forms.map((f, fi) => (
+          <div className="sg-form" key={key(f[0])} id={`sgf-${fi}`}>
+            <div className="sg-head">
+              <b>แบบฟอร์มที่ {fi + 1}</b>
+              <span className="note">{f.length === 1 ? 'แบบฟอร์มเดี่ยว · 1 บริษัท' : `รวม ${f.length} บริษัท`}</span>
+              {forms.length > 1 && (
+                <select className="in sg-merge" id={`sgm-${fi}`} aria-label={`รวมแบบฟอร์มที่ ${fi + 1} กับ…`} value="" disabled={busy}
+                  onChange={(e) => { const t = forms[Number(e.target.value)]; if (t) merge(f, t); }}>
+                  <option value="">⇄ รวมกับแบบฟอร์ม… · Merge with…</option>
+                  {forms.map((t, ti) => (ti !== fi ? <option key={ti} value={ti}>แบบฟอร์มที่ {ti + 1} · {t.map(short).join(' + ')}</option> : null))}
+                </select>
+              )}
+            </div>
+            <div className="sg-sheet" aria-label="ตัวอย่างหัวตาราง · Header preview">{f.map((c) => <span key={c.id}>☐ {c.th}</span>)}</div>
+            <ul className="sg-list">
+              {f.map((c) => (
+                <li key={c.id}>
+                  <span>{c.th}</span>
+                  {f.length > 1 && <button type="button" className="btn sm" id={`sgs-${c.id}`} disabled={busy} onClick={() => split(c)}>↗ แยกออก · Split out</button>}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+      {companies.some((c) => !c.active) && <span className="note">บริษัทที่ปิดใช้งานไม่แสดงในหัวตาราง</span>}
     </Section>
   );
 }
@@ -873,6 +924,7 @@ export default function SettingsPage() {
       <ApproverCompanies />
       <General />
       <Companies />
+      <SheetGroups />
       <Departments />
       <Units />
       <Places />
