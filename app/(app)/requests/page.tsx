@@ -27,7 +27,7 @@ export default function MyRequests() {
   }, [sb, uid, bump, toast]);
 
   const c = (s: string) => (list || []).filter((r) => r.status === s).length;
-  /** a draft another preparer handed to me: I may edit and send it, not delete it */
+  /** a draft another preparer handed to me: I may edit, send or delete it */
   const toMe = (r: RequestRow) => r.status === 'draft' && !!r.handoff && r.buyer_id === uid && r.preparer_id !== uid && r.created_by !== uid;
   const mine = (r: RequestRow) => r.preparer_id === uid || r.created_by === uid;
   const handedIn = (list || []).filter(toMe);
@@ -52,7 +52,7 @@ export default function MyRequests() {
           <span className="row" style={{ gap: 6, flexWrap: 'nowrap' }}>
             <PdfButton r={r} />
             {['draft', 'rejected'].includes(r.status) && (mine(r) || toMe(r)) && <EditRequestButton r={r} sm />}
-            {canDelete(r) && mine(r) && <DeleteRequestButton r={r} />}
+            {canDelete(r) && (mine(r) || toMe(r)) && <DeleteRequestButton r={r} />}
           </span>
         )} />}
     </>

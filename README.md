@@ -51,7 +51,7 @@ A quotation approval workflow. A preparer enters the request and attaches the qu
 - รอฉันอนุมัติ: ติ๊กเลือกบริษัทที่ส่งคำขอ · “ตัดสินใจล่าสุด” มีคอลัมน์บริษัท (ตัวย่อ)
 - คำขอที่มีเกิน 30 รายการ หน้าแบบฟอร์มแสดงทีละ 25 รายการ (มีปุ่มเปลี่ยนหน้า) เพื่อให้พิมพ์ได้ลื่นแม้มี 200 รายการ
 - บนมือถือ: หน้าคำขอแสดงรายการสินค้าและคู่เทียบราคาเป็นการ์ด (ไม่ต้องเลื่อนซ้ายขวา) · ตารางเปรียบเทียบราคาย่อให้พอดีจอ แตะเพื่อเปิดดูเต็มจอ ซูมด้วยปุ่ม 2 นิ้ว หรือแตะ 2 ครั้ง
-- **ส่งต่อร่างให้ผู้ซื้อ**: เลือก “ชื่อผู้ซื้อ” เป็นอีกคน (ต้องมีสิทธิ์ผู้จัดทำ) แล้วกด **บันทึกร่าง + ส่งต่อให้ผู้ซื้อ** → ผู้ซื้อได้รับแจ้งเตือน (และอีเมล ถ้าเปิดไว้) เห็นร่างในหน้า “คำขอของฉัน” เปิดแก้ไข แนบไฟล์ และกดส่งขออนุมัติเองได้ · เมื่อผู้ซื้อกดส่ง **ผู้ซื้อเป็นผู้จัดทำ** (ลายเซ็นของผู้ซื้อ) ใต้ช่องผู้จัดทำมีหมายเหตุ “ร่างโดย …” และคนที่ร่างยังเห็นคำขอและได้รับแจ้งเตือน · กด **ดึงร่างกลับ** หรือเปลี่ยนผู้ซื้อ = ยกเลิกการส่งต่อ · ผู้ซื้อลบร่างของคนอื่นไม่ได้ · ระหว่างส่งต่อ ทั้งสองคนแก้ร่างได้ (บันทึกล่าสุดชนะ ควรตกลงกันว่าใครแก้)
+- **ส่งต่อร่างให้ผู้ซื้อ**: เลือก “ชื่อผู้ซื้อ” เป็นอีกคน (ต้องมีสิทธิ์ผู้จัดทำ) แล้วกด **บันทึกร่าง + ส่งต่อให้ผู้ซื้อ** → ผู้ซื้อได้รับแจ้งเตือน (และอีเมล ถ้าเปิดไว้) เห็นร่างในหน้า “คำขอของฉัน” เปิดแก้ไข แนบไฟล์ และกดส่งขออนุมัติเองได้ · เมื่อผู้ซื้อกดส่ง **ผู้ซื้อเป็นผู้จัดทำ** (ลายเซ็นของผู้ซื้อ) ใต้ช่องผู้จัดทำมีหมายเหตุ “ร่างโดย …” และคนที่ร่างยังเห็นคำขอและได้รับแจ้งเตือน · กด **ดึงร่างกลับ** หรือเปลี่ยนผู้ซื้อ = ยกเลิกการส่งต่อ · ผู้ซื้อที่ได้รับร่างกด **ลบ** ได้ (คนที่ร่างได้รับแจ้งเตือน) · ระหว่างส่งต่อ ทั้งสองคนแก้ร่างได้ (บันทึกล่าสุดชนะ ควรตกลงกันว่าใครแก้)
 - ตารางเปรียบเทียบราคาหลายหน้า: ช่องลายเซ็น (ผู้อนุมัติทุกลำดับ + ผู้จัดทำ) อยู่ท้ายทุกหน้า · ยอดรวม และหมายเหตุ อยู่หน้าสุดท้าย (หน้าอื่นเขียนว่า “ยอดรวมและหมายเหตุ อยู่ที่หน้า N/N”)
 
 **ผู้ดูแลระบบ · Admin**
@@ -99,6 +99,7 @@ Every state change goes through database functions, so amounts, approvers and si
    ต่อด้วย [`supabase/migrations/0017_company_products_clear_notifs.sql`](supabase/migrations/0017_company_products_clear_notifs.sql) กด **Run** (รายการสินค้า SKU แยกตามบริษัท — SKU เดิมถูกคัดลอกให้ทุกบริษัท · ผู้ใช้ลบการแจ้งเตือนทั้งหมดของตัวเองได้)
    ต่อด้วย [`supabase/migrations/0018_email_notify_delete_dept.sql`](supabase/migrations/0018_email_notify_delete_dept.sql) กด **Run** (แจ้งเตือนทางอีเมล: การตั้งค่ารายบัญชี + คิวอีเมล · ลบฝ่ายที่ไม่มีการใช้งาน)
    ต่อด้วย [`supabase/migrations/0019_buyer_handoff_maintenance.sql`](supabase/migrations/0019_buyer_handoff_maintenance.sql) กด **Run** (ส่งต่อร่างให้ผู้ซื้อ · สวิตช์ปิดปรับปรุงระบบ) — **รันก่อนเปิดเว็บเวอร์ชันนี้**
+   ต่อด้วย [`supabase/migrations/0020_buyer_delete_draft.sql`](supabase/migrations/0020_buyer_delete_draft.sql) กด **Run** (ผู้ซื้อที่ได้รับร่างส่งต่อ ลบร่างและไฟล์แนบได้)
    > ระบบที่ใช้งานอยู่แล้ว: รันเฉพาะไฟล์ที่ยังไม่เคยรัน ตามลำดับเลข ข้อมูลเดิมถูกแปลงให้อัตโนมัติ และรันซ้ำได้โดยไม่เสียหาย
 4. ไปที่ **Project Settings → API** (หรือ **Data API / API Keys**) จดค่า:
    - **Project URL** → ใช้เป็น `NEXT_PUBLIC_SUPABASE_URL`
@@ -251,6 +252,7 @@ psql -d qa_test -v ON_ERROR_STOP=1 -f supabase/tests/96_wet_name_clear_products_
 psql -d qa_test -v ON_ERROR_STOP=1 -f supabase/tests/97_company_products_test.sql       # runs 0017 itself; ends with: ALL 0017 TESTS PASSED
 psql -d qa_test -v ON_ERROR_STOP=1 -f supabase/tests/98_email_notify_delete_dept_test.sql  # runs 0018 itself; ends with: ALL 0018 TESTS PASSED
 psql -d qa_test -v ON_ERROR_STOP=1 -f supabase/tests/99_buyer_handoff_maintenance_test.sql # runs 0019 itself; ends with: ALL 0019 TESTS PASSED
+psql -d qa_test -v ON_ERROR_STOP=1 -f supabase/tests/99b_buyer_delete_draft_test.sql   # runs 0020 itself; ends with: ALL 0020 TESTS PASSED
 ```
 ครอบคลุม · Covers: first admin, applications, self-promotion blocked, server-side amounts and tiers, approver resolution by department, signatures required, forward rules, reject → reopen → resend (keeps number), admin remind/reassign/cancel, letter path rules, visibility for outsiders, disabled accounts.
 

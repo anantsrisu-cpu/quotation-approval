@@ -578,7 +578,8 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
     if (!id) return;
     setBusy('delete');
     if (files.length) await sb.storage.from('attachments').remove(files.map((f) => f.path));
-    const { ok } = await run('delete-draft', sb.from('requests').delete().eq('id', id));
+    // 0020: through delete_request, so the buyer of a handed draft may delete it too
+    const { ok } = await run('delete-draft', sb.rpc('delete_request', { p_id: id }));
     setBusy(null);
     if (ok) {
       toast('ok', 'ลบฉบับร่างแล้ว · Draft deleted', '');
@@ -1182,7 +1183,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
               ? <button type="button" className="btn o" id="handoff-back" disabled={!!busy} onClick={() => handOver(false)}>↩ ดึงร่างกลับจาก {name(d.buyer_id)} · Take back</button>
               : <button type="button" className="btn o" id="handoff" disabled={!!busy} onClick={() => handOver(true)}>{busy === 'handoff' ? 'กำลังส่งต่อ…' : `บันทึกร่าง + ส่งต่อให้ผู้ซื้อ (${name(d.buyer_id)}) · Hand to buyer`}</button>)}
             <button type="button" className="btn o" onClick={() => setModal('preview')}>ดูตัวอย่างร่าง · Preview draft</button>
-            {id && !no && !asBuyer && <button type="button" className="btn d" disabled={!!busy} onClick={() => setModal('delete')}>ลบร่าง · Delete draft</button>}
+            {id && !no && <button type="button" className="btn d" disabled={!!busy} onClick={() => setModal('delete')}>ลบร่าง · Delete draft</button>}
           </div>
           <button
             type="button"
@@ -1267,6 +1268,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
       {modal === 'delete' && (
         <Modal title="ลบฉบับร่าง · Delete draft" onClose={() => setModal(null)}>
           <p style={{ margin: 0 }}>ลบฉบับร่างนี้และไฟล์แนบทั้งหมด? ย้อนกลับไม่ได้ · Delete this draft and its files? This cannot be undone.</p>
+          {asBuyer && <p className="note" style={{ margin: 0 }} id="del-handoff-note">ร่างนี้ส่งต่อมาจาก {name(d.preparer_id)} — ระบบจะแจ้ง {name(d.preparer_id)} ว่าคุณลบร่างแล้ว</p>}
           <div className="row" style={{ gap: 10, justifyContent: 'flex-end' }}>
             <button className="btn" onClick={() => setModal(null)}>ไม่ลบ · Keep</button>
             <button className="btn d" disabled={busy === 'delete'} onClick={deleteDraft}>ลบฉบับร่าง · Delete</button>
