@@ -27,6 +27,7 @@ A quotation approval workflow. A preparer enters the request and attaches the qu
 **ผู้จัดทำ · Preparer**
 - สร้างคำขอ: เรื่อง (สั่งซื้อเพื่อสต๊อค / สั่งซื้อทั่วไป / สั่งจ้าง), SKU (ชื่อสินค้าขึ้นอัตโนมัติ), ฝ่ายที่ขอซื้อ, ซื้อเพื่อ (ซ่อมแซม / ทดแทนของเดิม / Stock), ผู้ขาย, ผู้ซื้อ, บริษัทผู้ซื้อ
 - ราคาต่อหน่วยก่อน VAT × จำนวน = มูลค่ารวม + VAT = ยอดสุทธิ (คำนวณสด และคำนวณซ้ำที่เซิร์ฟเวอร์)
+- **แยก/รวมหัวตารางตามกลุ่มบริษัท**: ตั้งค่าระบบ → บริษัทผู้ซื้อและหัวจดหมาย → ช่อง **กลุ่มหัวตาราง** · บริษัทที่ตั้งชื่อกลุ่มเหมือนกันแสดงรวมในหัวตารางเดียวกัน (เช่น ไทยรุ่งเรือง คอร์ปอเรชั่น + ไทยรุ่งเรือง ไบโอ-เอ็นเนอร์จี้) · เว้นว่างหรือตั้งชื่อต่างกัน = แบบฟอร์มแยกของบริษัทนั้น (เช่น เอจี (ประเทศไทย)) · มีตัวอย่างหัวตารางใต้แต่ละบริษัท · PDF ที่อนุมัติแล้วไม่เปลี่ยน
 - **VAT ต่อรายการ**: ใต้ช่องราคา/หน่วย เลือก **Excl. VAT** (ราคาก่อน VAT — ค่าเริ่มต้น) · **Incl. VAT** (กรอกราคารวม VAT ตามใบเสนอราคา ระบบแปลงเป็นราคาก่อน VAT ให้อัตโนมัติ ใช้กับราคาของทุกเจ้าในรายการนั้น) · **VAT 0** (รายการนี้ไม่คิด VAT) · ตารางเปรียบเทียบแสดงราคาก่อน VAT ทุกช่อง มีหมายเหตุใต้รายการ (“ราคาเสนอรวม VAT 107.00 …” / “VAT 0”) และ VAT คิดเฉพาะรายการที่มี VAT
 - เห็นรายชื่อผู้อนุมัติตามวงเงินทันทีที่กรอกจำนวนเงิน
 - คู่เทียบราคา: ปุ่ม + / − เพิ่มลดผู้ขาย, กรอกราคาต่อหน่วย ระบบคำนวณยอดและส่วนต่าง; หรือเลือก “ไม่มีคู่เทียบ” แล้วบังคับใส่เหตุผล
@@ -102,6 +103,7 @@ Every state change goes through database functions, so amounts, approvers and si
    ต่อด้วย [`supabase/migrations/0019_buyer_handoff_maintenance.sql`](supabase/migrations/0019_buyer_handoff_maintenance.sql) กด **Run** (ส่งต่อร่างให้ผู้ซื้อ · สวิตช์ปิดปรับปรุงระบบ) — **รันก่อนเปิดเว็บเวอร์ชันนี้**
    ต่อด้วย [`supabase/migrations/0020_buyer_delete_draft.sql`](supabase/migrations/0020_buyer_delete_draft.sql) กด **Run** (ผู้ซื้อที่ได้รับร่างส่งต่อ ลบร่างและไฟล์แนบได้ · ไฟล์แนบต้องเป็น PDF)
    ต่อด้วย [`supabase/migrations/0021_vat_mode.sql`](supabase/migrations/0021_vat_mode.sql) กด **Run** (VAT ต่อรายการ: Excl. VAT / Incl. VAT / VAT 0) — **รันก่อนเปิดเว็บเวอร์ชันนี้**
+   ต่อด้วย [`supabase/migrations/0022_sheet_company_groups.sql`](supabase/migrations/0022_sheet_company_groups.sql) กด **Run** (กลุ่มบริษัทบนหัวตารางเปรียบเทียบ — ครั้งแรกทุกบริษัทอยู่กลุ่มเดียวกัน หัวตารางจึงเหมือนเดิมจนกว่าจะตั้งกลุ่ม)
    > ระบบที่ใช้งานอยู่แล้ว: รันเฉพาะไฟล์ที่ยังไม่เคยรัน ตามลำดับเลข ข้อมูลเดิมถูกแปลงให้อัตโนมัติ และรันซ้ำได้โดยไม่เสียหาย
 4. ไปที่ **Project Settings → API** (หรือ **Data API / API Keys**) จดค่า:
    - **Project URL** → ใช้เป็น `NEXT_PUBLIC_SUPABASE_URL`
@@ -256,6 +258,7 @@ psql -d qa_test -v ON_ERROR_STOP=1 -f supabase/tests/98_email_notify_delete_dept
 psql -d qa_test -v ON_ERROR_STOP=1 -f supabase/tests/99_buyer_handoff_maintenance_test.sql # runs 0019 itself; ends with: ALL 0019 TESTS PASSED
 psql -d qa_test -v ON_ERROR_STOP=1 -f supabase/tests/99b_buyer_delete_draft_test.sql   # runs 0020 itself; ends with: ALL 0020 TESTS PASSED
 psql -d qa_test -v ON_ERROR_STOP=1 -f supabase/tests/99c_vat_mode_test.sql            # runs 0021 itself; ends with: ALL 0021 TESTS PASSED
+psql -d qa_test -v ON_ERROR_STOP=1 -f supabase/tests/99d_sheet_company_groups_test.sql # runs 0022 itself; ends with: ALL 0022 TESTS PASSED
 ```
 ครอบคลุม · Covers: first admin, applications, self-promotion blocked, server-side amounts and tiers, approver resolution by department, signatures required, forward rules, reject → reopen → resend (keeps number), admin remind/reassign/cancel, letter path rules, visibility for outsiders, disabled accounts.
 

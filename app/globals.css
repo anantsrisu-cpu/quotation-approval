@@ -365,3 +365,6 @@ table.cmp tr.why.split td{background:var(--sage-bg)}
 .vat-chip.zero{background:var(--sage-bg);color:var(--sage-ink)}
 .vat-note{color:var(--brown);font-style:italic}
 @media (max-width:640px){.item-grid .price-f{grid-column:1/-1}.item-grid .price-f .vat-seg{max-width:none}}
+.sg-preview{display:flex;flex-wrap:wrap;gap:4px 16px;align-items:center}
+.sg-preview span{font-weight:600;color:var(--muted)}
+.sg-preview span.on{color:var(--ink)}

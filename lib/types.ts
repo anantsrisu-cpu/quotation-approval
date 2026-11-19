@@ -52,6 +52,18 @@ export interface Department { id: string; th: string; en: string; sort: number; 
 export interface Company {
   id: string; th: string; en: string; initials: string; address: string;
   logo_path: string | null; sort: number; active: boolean;
+  /** 0022: companies with the same group share one sheet header; empty = a header of its own */
+  sheet_group?: string;
+}
+
+/** the companies printed as tick boxes on the sheet header of a request bought by `buyerId` */
+export function sheetCompanies(all: Company[], buyerId: string | null | undefined): Company[] {
+  const key = (c: Company) => (c.sheet_group || '').trim().toLowerCase() || `#${c.id}`;
+  const buyer = all.find((c) => c.id === buyerId);
+  if (!buyer) return all.filter((c) => c.active);
+  // before SQL 0022 there are no groups: every active company, as before
+  if (!('sheet_group' in buyer)) return all.filter((c) => c.active || c.id === buyerId);
+  return all.filter((c) => (c.active || c.id === buyerId) && key(c) === key(buyer));
 }
 export interface Product { /** buyer company whose list this SKU is in (0017) */ company_id: string; sku: string; name: string; category: string; unit: string; active: boolean; updated_at?: string }
 

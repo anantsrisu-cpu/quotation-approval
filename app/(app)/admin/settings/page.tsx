@@ -4,7 +4,7 @@ import { useApp } from '@/components/AppProvider';
 import { AdminGate } from '@/components/AdminGate';
 import { PageHead } from '@/components/ui';
 import { dt, fmt, num } from '@/lib/format';
-import type { Company, DeliveryPlace, Department, Position, Profile, Tier, UnitRow } from '@/lib/types';
+import { sheetCompanies, type Company, type DeliveryPlace, type Department, type Position, type Profile, type Tier, type UnitRow } from '@/lib/types';
 
 type TierEdit = Omit<Tier, 'id' | 'max_amount'> & { id?: number; max: string };
 const slug = (s: string) => s.trim().toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
@@ -399,12 +399,18 @@ function Companies() {
   const { sb, companies, run, toast, reloadRefs, logoUrl } = useApp();
   const [rows, setRows] = useState<(Company & { isNew?: boolean })[]>([]);
   useEffect(() => setRows(companies.map((c) => ({ ...c }))), [companies]);
+  // 0022: sheet header groups (only once that SQL has been run)
+  const grouped = companies.some((c) => 'sheet_group' in c);
+  const groupNames = [...new Set(rows.map((c) => (c.sheet_group || '').trim()).filter(Boolean))];
   async function save() {
     const fixed = rows.map((c) => ({ ...c, id: c.isNew ? slug(c.id || c.en || '') : c.id }));
     if (fixed.some((c) => !c.id || !c.th.trim())) return toast('bad', 'กรอกรหัส (อังกฤษ) และชื่อบริษัทให้ครบ · Code and Thai name required', '');
     const dup = dupCode(fixed.map((c) => c.id));
     if (dup) return toast('bad', `รหัสบริษัท “${dup}” ซ้ำกัน · Duplicate code`, 'แก้ช่องรหัสของแถวที่เพิ่มใหม่ให้ไม่ซ้ำกับบริษัทที่มีอยู่ (เช่น trr-bio มีอยู่แล้ว) แล้วกดบันทึกอีกครั้ง · Give the new row a different code');
-    const { ok } = await run('save-companies', sb.from('companies').upsert(fixed.map(({ id, th, en, initials, address, logo_path, sort, active }) => ({ id, th: th.trim(), en: en.trim(), initials: initials.trim().slice(0, 4), address: address.trim(), logo_path, sort: Number(sort) || 0, active }))));
+    const { ok } = await run('save-companies', sb.from('companies').upsert(fixed.map(({ id, th, en, initials, address, logo_path, sort, active, sheet_group }) => ({
+      id, th: th.trim(), en: en.trim(), initials: initials.trim().slice(0, 4), address: address.trim(), logo_path, sort: Number(sort) || 0, active,
+      ...(grouped ? { sheet_group: (sheet_group || '').trim().slice(0, 60) } : {}),
+    }))));
     if (ok) { toast('ok', 'บันทึกบริษัทแล้ว · Companies saved', ''); reloadRefs(); }
   }
   async function uploadLogo(i: number, f: File) {
@@ -433,11 +439,16 @@ function Companies() {
     <Section className="card">
       <div className="actions"><h2>บริษัทผู้ซื้อและหัวจดหมาย · Buyer companies & letterhead</h2>
         <div className="row" style={{ gap: 8 }}>
-          <button className="btn sm" onClick={() => setRows([...rows, { id: '', th: '', en: '', initials: '', address: '', logo_path: null, sort: (rows.at(-1)?.sort || 0) + 10, active: true, isNew: true }])}>+ เพิ่ม · Add</button>
+          <button className="btn sm" onClick={() => setRows([...rows, { id: '', th: '', en: '', initials: '', address: '', logo_path: null, sort: (rows.at(-1)?.sort || 0) + 10, active: true, isNew: true, ...(grouped ? { sheet_group: '' } : {}) }])}>+ เพิ่ม · Add</button>
           <button className="btn p sm" onClick={save}>บันทึก · Save</button>
         </div>
       </div>
-      <span className="note">บริษัทที่เปิดใช้งานแสดงเป็นช่องติ๊กในหัวตารางเปรียบเทียบ บริษัทผู้ซื้อของคำขอถูกติ๊ก ✓ และใช้โลโก้ของบริษัทนั้น · Active companies appear as tick boxes on the sheet; the buyer company is ticked and its logo used.</span>
+      {grouped ? (
+        <span className="note">หัวตารางเปรียบเทียบแสดงช่องติ๊กของบริษัทที่อยู่ <b>กลุ่มหัวตารางเดียวกัน</b> กับบริษัทผู้ซื้อ (บริษัทผู้ซื้อถูกติ๊ก ✓ และใช้โลโก้ของบริษัทนั้น) · ตั้งชื่อกลุ่มเหมือนกัน = รวมในแบบฟอร์มเดียว · ตั้งชื่อกลุ่มต่างกันหรือเว้นว่าง = แบบฟอร์มแยกของบริษัทนั้น · มีผลกับตารางที่สร้างใหม่ (PDF ที่อนุมัติแล้วไม่เปลี่ยน) · Companies in the same sheet group share one header.</span>
+      ) : (
+        <span className="note">บริษัทที่เปิดใช้งานแสดงเป็นช่องติ๊กในหัวตารางเปรียบเทียบ บริษัทผู้ซื้อของคำขอถูกติ๊ก ✓ และใช้โลโก้ของบริษัทนั้น · รัน SQL 0022 เพื่อแยก/รวมหัวตารางตามกลุ่มบริษัท</span>
+      )}
+      {grouped && groupNames.length > 0 && <datalist id="sheet-groups">{groupNames.map((g) => <option key={g} value={g} />)}</datalist>}
       {rows.map((c, i) => {
         const url = logoUrl(c);
         return (
@@ -458,7 +469,21 @@ function Companies() {
               <label className="f">ชื่อ (ไทย)<input className="in" value={c.th} onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, th: e.target.value } : x)))} /></label>
               <label className="f">ชื่อ (อังกฤษ)<input className="in" value={c.en} onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, en: e.target.value } : x)))} /></label>
               <label className="f span2">ที่อยู่ · Address<input className="in" value={c.address} onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, address: e.target.value } : x)))} /></label>
+              {grouped && (
+                <label className="f">กลุ่มหัวตาราง · Sheet group
+                  <input className="in" id={`sg-${i}`} list="sheet-groups" maxLength={60} value={c.sheet_group || ''} placeholder="เว้นว่าง = แบบฟอร์มแยก"
+                    onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, sheet_group: e.target.value } : x)))} />
+                </label>
+              )}
             </div>
+            {grouped && c.th.trim() && (
+              <div className="note sg-preview" id={`sgp-${i}`}>
+                หัวตารางเมื่อซื้อในนามบริษัทนี้:{' '}
+                {sheetCompanies(rows.map((x, j) => ({ ...x, id: x.id || `new-${j}` })), c.id || `new-${i}`).map((x) => (
+                  <span key={x.id} className={x.id === (c.id || `new-${i}`) ? 'on' : undefined}>{x.id === (c.id || `new-${i}`) ? '☑' : '☐'} {x.th || '—'}</span>
+                ))}
+              </div>
+            )}
           </div>
         );
       })}

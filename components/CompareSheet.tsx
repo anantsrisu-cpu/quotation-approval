@@ -4,7 +4,7 @@ import { useApp } from './AppProvider';
 import { compDiscounts, compNets, compPrices, itemsOf, netOf, normDiscount, vatModeOf } from '@/lib/calc';
 import { dOnly, fmt, r2 } from '@/lib/format';
 import { renderSheet, type SheetData, type SheetSigner, type SheetVendor } from '@/lib/compareSheet';
-import type { RequestRow, RequestStep } from '@/lib/types';
+import { sheetCompanies, type RequestRow, type RequestStep } from '@/lib/types';
 
 /** 0021: printed under the item on the sheet and the request page */
 export function vatNote(it: { vat_mode?: string; price_in?: number; net_in?: number; discount?: string }): string {
@@ -132,7 +132,8 @@ export function useSheetData(r: RequestRow, steps: RequestStep[], draft: boolean
   return {
     logoUrl: logoUrl(co),
     initials: co?.initials || 'CO',
-    companies: companies.filter((c) => c.active || c.id === r.company_id).map((c) => ({ id: c.id, label: c.th })),
+    // 0022: only the companies of the buyer company's group (ตั้งค่าระบบ → บริษัทผู้ซื้อ)
+    companies: sheetCompanies(companies, r.company_id).map((c) => ({ id: c.id, label: c.th })),
     companyId: r.company_id,
     info: [
       // typed on the request; otherwise the system number and the final-approval date
