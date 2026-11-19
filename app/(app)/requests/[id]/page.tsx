@@ -11,7 +11,8 @@ import { PURP, SUBJ, dOnly, dt, fileSize, fmt } from '@/lib/format';
 import { daysText, itemsOf } from '@/lib/calc';
 import { CompareTable, DeliveryText, ItemsTable } from '@/components/ItemTables';
 import { EditRequestButton } from '@/components/EditRequest';
-import { downloadUrl, elementToPdf } from '@/lib/pdf';
+import { elementToPdf } from '@/lib/pdf';
+import { downloadSheetWithAttachments } from '@/lib/mergePdf';
 import { reportError } from '@/lib/errors';
 import type { LogEntry, RequestFile, RequestRow, RequestStep } from '@/lib/types';
 
@@ -107,11 +108,17 @@ export default function RequestDetail() {
       </div>
     );
 
+  /** the signed sheet first, then the PDF attachments, as one file to print */
   async function downloadPdf() {
     if (!r?.letter_path) return;
-    const { data, error } = await sb.storage.from('letters').createSignedUrl(r.letter_path, 120, { download: `${r.no || 'letter'}.pdf` });
-    if (error || !data) return toast('bad', 'ดาวน์โหลดไม่สำเร็จ · Download failed', error?.message);
-    downloadUrl(data.signedUrl, `${r.no || 'letter'}.pdf`);
+    setBusy('pdf');
+    try {
+      const res = await downloadSheetWithAttachments(sb, { id: r.id, letter_path: r.letter_path }, `${r.no || 'letter'}.pdf`);
+      if (res.skipped.length) toast('bad', 'บางไฟล์แนบรวมไม่ได้ · Some attachments were left out', `${res.skipped.join(', ')} — เปิดไฟล์นั้นจากรายการไฟล์แนบแล้วปริ้นแยก`);
+    } catch (e: any) {
+      toast('bad', 'ดาวน์โหลดไม่สำเร็จ · Download failed', e?.message || '');
+    }
+    setBusy(null);
   }
   async function openFile(f: RequestFile) {
     const { data, error } = await sb.storage.from('attachments').createSignedUrl(f.path, 300);
@@ -203,7 +210,7 @@ export default function RequestDetail() {
           {(isPrep || has('admin')) && (r.status === 'pending' || r.status === 'draft') && (
             <button className="btn d" onClick={() => { setReason(''); setModal('cancel'); }}>ยกเลิกคำขอ · Cancel</button>
           )}
-          {r.status === 'approved' && r.letter_path && <button className="btn p" onClick={downloadPdf}>ดาวน์โหลด PDF ตารางเปรียบเทียบราคา · Download PDF</button>}
+          {r.status === 'approved' && r.letter_path && <button className="btn p" id="pdf-top" disabled={busy === 'pdf'} onClick={downloadPdf} title="ตารางเปรียบเทียบราคา ตามด้วยใบเสนอราคาที่แนบ (PDF) ในไฟล์เดียว">{busy === 'pdf' ? 'กำลังรวมไฟล์… · Joining…' : 'ดาวน์โหลด PDF ตารางเปรียบเทียบ + ไฟล์แนบ · Download PDF'}</button>}
         </div>
       </div>
 
@@ -357,7 +364,7 @@ export default function RequestDetail() {
       <div className="card">
         <div className="actions">
           <h2>ตารางเปรียบเทียบราคา · Comparison sheet</h2>
-          {r.status === 'approved' && r.letter_path && <button className="btn p sm" onClick={downloadPdf}>ดาวน์โหลด PDF · Download PDF</button>}
+          {r.status === 'approved' && r.letter_path && <button className="btn p sm" disabled={busy === 'pdf'} onClick={downloadPdf}>{busy === 'pdf' ? 'กำลังรวมไฟล์…' : 'ดาวน์โหลด PDF (รวมไฟล์แนบ) · Download PDF'}</button>}
         </div>
         <span className="note">
           {r.status === 'approved' ? 'อนุมัติครบแล้ว เอกสารล็อก แก้ไขไม่ได้ บันทึกเป็น PDF เท่านั้น · Locked; saved as PDF only' : 'ยังไม่อนุมัติครบ แสดงเป็นร่าง · Not fully approved — shown as draft'}

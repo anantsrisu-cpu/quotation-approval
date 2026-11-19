@@ -15,6 +15,7 @@
     "html2canvas": "^1.4.1",
     "jspdf": "^4.2.1",
     "next": "^15.5.26",
+    "pdf-lib": "1.17.1",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "read-excel-file": "^9.3.12",

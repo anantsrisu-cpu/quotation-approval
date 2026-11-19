@@ -2,10 +2,10 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { useApp } from './AppProvider';
-import { downloadUrl } from '@/lib/pdf';
+import { downloadSheetWithAttachments } from '@/lib/mergePdf';
 import type { RequestRow } from '@/lib/types';
 
-/** Approved requests: download the signed comparison-sheet PDF straight from a list. */
+/** Approved requests: download the signed comparison sheet + PDF attachments (one file) straight from a list. */
 export function PdfButton({ r }: { r: Pick<RequestRow, 'id' | 'no' | 'status' | 'letter_path'> }) {
   const { sb, toast } = useApp();
   const [busy, setBusy] = useState(false);
@@ -16,13 +16,16 @@ export function PdfButton({ r }: { r: Pick<RequestRow, 'id' | 'no' | 'status' | 
   const file = `${r.no || 'letter'}.pdf`;
   async function go() {
     setBusy(true);
-    const { data, error } = await sb.storage.from('letters').createSignedUrl(r.letter_path!, 120, { download: file });
+    try {
+      const res = await downloadSheetWithAttachments(sb, { id: r.id, letter_path: r.letter_path! }, file);
+      if (res.skipped.length) toast('bad', 'บางไฟล์แนบรวมไม่ได้ · Some attachments were left out', `${res.skipped.join(', ')} — เปิดคำขอแล้วปริ้นไฟล์นั้นแยก`);
+    } catch (e: any) {
+      toast('bad', 'ดาวน์โหลดไม่สำเร็จ · Download failed', e?.message || '');
+    }
     setBusy(false);
-    if (error || !data) return toast('bad', 'ดาวน์โหลดไม่สำเร็จ · Download failed', error?.message);
-    downloadUrl(data.signedUrl, file);
   }
   return (
-    <button className="btn p sm pdf-btn" onClick={go} disabled={busy} title="ดาวน์โหลด PDF ตารางเปรียบเทียบราคาเพื่อปริ้น · Download PDF to print">
+    <button className="btn p sm pdf-btn" onClick={go} disabled={busy} title="ดาวน์โหลด PDF ตารางเปรียบเทียบราคา + ไฟล์แนบ เพื่อปริ้น · Download PDF to print">
       {busy ? '…' : '🖨 PDF'}
     </button>
   );

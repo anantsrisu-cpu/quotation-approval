@@ -10,10 +10,26 @@ import { blankComp, blankItem, calcItems, compDiscounts, compPrices, itemsOf, pa
 import type { DeliverySlot } from '@/lib/types';
 import { PR_EXAMPLE, PR_FORMAT, PURP, SUBJ, SUBJ_EN, fileSize, fmt, isPr, normPr, num } from '@/lib/format';
 import { UnitField } from './UnitField';
+import { isPdfFile } from '@/lib/mergePdf';
 import type { ApproverPreview, LineItem, Product, RequestFile, RequestRow, RequestStep } from '@/lib/types';
 
 const MAX_FILE = 25 * 1024 * 1024;
-const ACCEPT = '.pdf,.jpg,.jpeg,.png,.webp,.xlsx,.xls,.docx,.doc,.csv';
+// PDF only: after the last approval the sheet and the attachments download as one PDF (0020)
+const ACCEPT = '.pdf,application/pdf';
+
+/** null = can be joined to the sheet; otherwise why not */
+async function pdfProblem(f: File): Promise<string | null> {
+  if (!isPdfFile({ name: f.name, mime: f.type })) return 'ไม่ใช่ไฟล์ PDF';
+  try {
+    const { PDFDocument } = await import('pdf-lib');
+    await PDFDocument.load(await f.arrayBuffer());
+    return null;
+  } catch (e) {
+    return /encrypt/i.test(String((e as Error)?.message || e))
+      ? 'PDF ถูกล็อก/มีรหัสผ่าน รวมไฟล์ไม่ได้ — เปิดไฟล์แล้วสั่งพิมพ์เป็น PDF ใหม่ (Microsoft Print to PDF) แล้วแนบไฟล์ใหม่'
+      : 'ไฟล์ PDF เสียหรือเปิดไม่ได้';
+  }
+}
 
 interface Draft {
   preparer_id: string;
@@ -446,6 +462,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
     });
   }
   if (!files.length) missing.push('แนบใบเสนอราคาอย่างน้อย 1 ไฟล์ · Attach at least one quotation file');
+  files.filter((f) => !isPdfFile(f)).forEach((f) => missing.push(`ไฟล์แนบ “${f.name}” ไม่ใช่ PDF — ลบแล้วแนบใหม่เป็น PDF · Attachments must be PDF`));
   approvers.filter((a) => a.sign_mode !== 'wet').forEach((a) => {
     if (!a.approver_id) missing.push(`ยังไม่มีผู้อนุมัติตำแหน่ง ${a.pos_th} ในระบบ แจ้งผู้ดูแล · No approver set up for ${a.pos_th}`);
   });
@@ -525,9 +542,19 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
     const arr = Array.from(list);
     const tooBig = arr.filter((f) => f.size > MAX_FILE);
     if (tooBig.length) toast('bad', 'ไฟล์ใหญ่เกิน 25 MB · File over 25 MB', tooBig.map((f) => f.name).join(', '));
-    const ok = arr.filter((f) => f.size <= MAX_FILE);
-    if (!ok.length) return;
     setBusy('upload');
+    const ok: File[] = [];
+    const refused: string[] = [];
+    for (const f of arr.filter((x) => x.size <= MAX_FILE)) {
+      const why = await pdfProblem(f);
+      if (why) refused.push(`${f.name}: ${why}`);
+      else ok.push(f);
+    }
+    if (refused.length) toast('bad', 'แนบได้เฉพาะ PDF ที่เปิดได้ · PDF files only', refused.join(' · '));
+    if (!ok.length) {
+      setBusy(null);
+      return;
+    }
     const rid = id || (await saveDraft(true));
     if (!rid) {
       setBusy(null);
@@ -1153,14 +1180,15 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
         <h2>แนบใบเสนอราคา · Attach quotation <span className="req">*</span></h2>
         <label className="box" htmlFor="f-files" style={{ textAlign: 'center', cursor: 'pointer', display: 'block' }}>
           <b>{busy === 'upload' ? 'กำลังอัปโหลด… · Uploading…' : 'เลือกไฟล์ · Choose files'}</b>
-          <div className="note">PDF, JPG, PNG, Excel, Word · ไม่เกิน 25 MB ต่อไฟล์ · up to 25 MB each</div>
+          <div className="note">เฉพาะ PDF · ไม่เกิน 25 MB ต่อไฟล์ · PDF only, up to 25 MB each</div>
+          <div className="note">เมื่ออนุมัติครบ ไฟล์ PDF ดาวน์โหลดได้เป็นไฟล์เดียว: ตารางเปรียบเทียบราคาเป็นหน้าแรก ตามด้วยไฟล์แนบตามลำดับที่แนบ</div>
           <input ref={fileInput} type="file" id="f-files" multiple className="sr" accept={ACCEPT} disabled={busy === 'upload'} onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }} />
         </label>
         {files.length > 0 && (
           <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
             {files.map((f) => (
               <li key={f.id} className="file-row">
-                <span className="chip st-draft">{(f.name.split('.').pop() || '').toUpperCase()}</span>
+                <span className={`chip ${isPdfFile(f) ? 'st-draft' : 'st-bad'}`} title={isPdfFile(f) ? undefined : 'ไม่ใช่ PDF — ลบแล้วแนบใหม่เป็น PDF'}>{(f.name.split('.').pop() || '').toUpperCase()}{isPdfFile(f) ? '' : ' ✕ ไม่ใช่ PDF'}</span>
                 <button type="button" className="link-btn nm" style={{ textAlign: 'left' }} onClick={() => openFile(f)}>{f.name}</button>
                 <span className="note">{fileSize(f.size)}</span>
                 <button type="button" className="icon-btn" onClick={() => removeFile(f)} aria-label={`ลบไฟล์ ${f.name} · Remove file`}>✕</button>
