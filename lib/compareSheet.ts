@@ -54,7 +54,7 @@ export interface SheetSigner {
   position: string;
   date: string;
   signature?: string | null;
-  note?: string; // อนุมัติแทน … / จัดทำแทนโดย …
+  note?: string; // อนุมัติแทน … (approvers only)
   /** skip = not needed for this amount (crossed out) · wet = signs by hand on the printout */
   state?: 'skip' | 'wet';
 }

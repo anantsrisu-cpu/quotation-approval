@@ -751,7 +751,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
         {asBuyer && (
           <div className="ok-box" id="handoff-banner" role="status">
             <b>ร่างนี้ส่งต่อมาจาก {name(d.preparer_id)} · Handed to you by {name(d.preparer_id)}</b><br />
-            แก้ไขได้ตามต้องการ แล้วกด “ถัดไป: ตรวจผู้อนุมัติและส่ง” · เมื่อส่ง <b>คุณจะเป็นผู้จัดทำ</b> (ใช้ลายเซ็นของคุณ) และใต้ช่องผู้จัดทำจะมีหมายเหตุ “ร่างโดย {name(d.preparer_id)}”
+            แก้ไขได้ตามต้องการ แล้วกด “ถัดไป: ตรวจผู้อนุมัติและส่ง” · เมื่อส่ง <b>คุณจะเป็นผู้จัดทำ</b> (ใช้ลายเซ็นของคุณ) · ประวัติคำขอบันทึกว่าร่างโดย {name(d.preparer_id)}
           </div>
         )}
         {isAdmin && !asBuyer && (
