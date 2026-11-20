@@ -4,6 +4,7 @@ import { useApp } from '@/components/AppProvider';
 import { AdminGate } from '@/components/AdminGate';
 import { PageHead } from '@/components/ui';
 import { dt, fmt, num } from '@/lib/format';
+import { LOGO_MAX, imageSize, shrinkFile, useThumb } from '@/lib/smallImage';
 import type { Company, DeliveryPlace, Department, Position, Profile, Tier, UnitRow } from '@/lib/types';
 
 type TierEdit = Omit<Tier, 'id' | 'max_amount'> & { id?: number; max: string };
@@ -412,10 +413,14 @@ function Companies() {
     }))));
     if (ok) { toast('ok', 'บันทึกบริษัทแล้ว · Companies saved', ''); reloadRefs(); }
   }
-  async function uploadLogo(i: number, f: File) {
+  async function uploadLogo(i: number, file: File) {
+    let f = file;
     const c = rows[i];
     if (c.isNew) return toast('bad', 'บันทึกบริษัทก่อน แล้วจึงอัปโหลดโลโก้ · Save the company first', '');
     if (!/^image\/(png|jpeg|webp|svg\+xml)$/.test(f.type)) return toast('bad', 'ใช้ไฟล์ PNG, JPG, WEBP หรือ SVG · Use PNG/JPG/WEBP/SVG', '');
+    if (f.size > 8 * 1024 * 1024) return toast('bad', 'โลโก้ต้องไม่เกิน 8 MB · Logo must be under 8 MB', '');
+    // a big logo is stored at most 1,000 px: plenty for the sheet and the PDF, and light to scroll past
+    f = await shrinkFile(f);
     if (f.size > 2 * 1024 * 1024) return toast('bad', 'โลโก้ต้องไม่เกิน 2 MB · Logo must be under 2 MB', '');
     const ext = f.name.split('.').pop()?.toLowerCase().replace(/[^a-z0-9]/g, '') || 'png';
     const path = `${c.id}/logo-${Date.now()}.${ext}`;
@@ -426,6 +431,20 @@ function Companies() {
       if (c.logo_path) sb.storage.from('logos').remove([c.logo_path]);
       toast('ok', 'อัปโหลดโลโก้แล้ว · Logo uploaded', c.th);
       reloadRefs();
+    }
+  }
+  /** a logo uploaded before shrinking was added: download, shrink, upload again */
+  async function shrinkStored(c: Company) {
+    const url = logoUrl(c);
+    if (!url || !c.logo_path) return;
+    try {
+      const b = await (await fetch(url)).blob();
+      const small = await shrinkFile(new File([b], c.logo_path.split('/').pop() || 'logo.png', { type: b.type || 'image/png' }));
+      if (small.size === b.size) return toast('ok', 'โลโก้มีขนาดเหมาะสมแล้ว', c.th);
+      const i = rows.findIndex((x) => x.id === c.id);
+      if (i >= 0) await uploadLogo(i, small);
+    } catch (e) {
+      toast('bad', 'ย่อขนาดโลโก้ไม่สำเร็จ · Could not shrink the logo', String((e as Error)?.message || e));
     }
   }
   async function removeLogo(c: Company) {
@@ -448,7 +467,7 @@ function Companies() {
         return (
           <div key={i} style={{ border: '1px solid var(--beige)', borderRadius: 10, padding: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div className="row" style={{ gap: 12, alignItems: 'center' }}>
-              {url ? <img className="logo-img" src={url} alt={`โลโก้ ${c.th}`} style={{ border: '1px solid var(--beige)' }} /> : (
+              {url ? <LogoThumb url={url} alt={`โลโก้ ${c.th}`} onShrink={() => shrinkStored(c)} /> : (
                 <div style={{ width: 62, height: 62, borderRadius: 10, background: 'var(--brown)', color: '#fff', fontWeight: 700, fontSize: 20, display: 'grid', placeItems: 'center' }}>{c.initials || 'CO'}</div>
               )}
               <label className="btn sm" style={{ cursor: 'pointer' }}>{url ? 'เปลี่ยนโลโก้ · Change logo' : 'อัปโหลดโลโก้ · Upload logo'}
@@ -468,6 +487,25 @@ function Companies() {
         );
       })}
     </Section>
+  );
+}
+
+/** logo preview: shows a small copy (a big logo decoded at full size made the page stutter while scrolling) */
+function LogoThumb({ url, alt, onShrink }: { url: string; alt: string; onShrink: () => void }) {
+  const small = useThumb(url, 124);
+  const [size, setSize] = useState<{ w: number; h: number } | null>(null);
+  useEffect(() => { let live = true; imageSize(url).then((s) => live && setSize(s)); return () => { live = false; }; }, [url]);
+  const big = !!size && Math.max(size.w, size.h) > LOGO_MAX * 1.2;
+  return (
+    <>
+      {small ? <img className="logo-img" src={small} alt={alt} decoding="async" style={{ border: '1px solid var(--beige)' }} />
+        : <span className="logo-img" style={{ border: '1px solid var(--beige)', display: 'inline-block', background: 'var(--softer)' }} aria-hidden="true" />}
+      {big && (
+        <button type="button" className="btn sm" onClick={onShrink} title={`โลโก้ขนาด ${size!.w}×${size!.h} px ใหญ่เกินจำเป็น ทำให้หน้าเว็บและตารางเปรียบเทียบเลื่อนช้า`}>
+          ⤓ ย่อขนาดโลโก้ ({size!.w}×{size!.h} → {LOGO_MAX} px)
+        </button>
+      )}
+    </>
   );
 }
 
