@@ -100,6 +100,8 @@ export interface LineItem {
   /** inc: the prices as quoted (including VAT), kept for editing and for the sheet */
   price_in?: number;
   net_in?: number;
+  /** 0023: why it was bought above the previous price */
+  price_up_reason?: string;
 }
 
 export type VatMode = 'ex' | 'inc' | 'zero';

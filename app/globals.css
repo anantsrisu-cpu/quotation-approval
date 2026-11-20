@@ -373,3 +373,6 @@ table.cmp tr.why.split td{background:var(--sage-bg)}
 .sg-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
 .sg-list li{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
 @media (max-width:420px){.sg-forms{grid-template-columns:1fr}}
+.up-box{border:1px solid var(--warn-line);background:var(--warn-bg);border-radius:10px;padding:10px 12px}
+.up-box .f{white-space:normal;color:var(--warn)}
+.up-box .in{color:var(--ink)}

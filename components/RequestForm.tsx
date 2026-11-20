@@ -180,7 +180,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
             vat: vatModeOf(it.vat_mode), unit_price: money(vatModeOf(it.vat_mode) === 'inc' && it.price_in != null ? it.price_in : it.unit_price), discount: it.discount || '', prev_price: it.prev_price != null ? fmt(it.prev_price) : '', prev_vendor: it.prev_vendor || '', prev_date: it.prev_date || '', brand: it.brand || '', report_no: it.report_no || '',
             // keep a ✓ only where it differs from the automatic (cheapest) one
             award: it.award != null && it.award !== it.award_auto && !it.split?.length ? it.award : null, award_reason: it.award_reason || '',
-            split: it.split?.length ? splitToDraft(it.split) : null }))
+            split: it.split?.length ? splitToDraft(it.split) : null, up_reason: it.price_up_reason || '' }))
         : [blankItem()];
       const comps: DraftComp[] = (r.comparisons || []).map((c) => {
         const ps = compPrices(c);
@@ -464,6 +464,10 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
         missing.push(`รายการที่ ${k + 1}: ติ๊ก ✓ ${vendorName(a.pick)} ซึ่งไม่ใช่ราคาต่ำสุด ระบุเหตุผล · Give a reason for not buying the lowest price`);
     });
   }
+  c.priceUp.forEach((u, k) => {
+    if (u && !d.items[k].up_reason.trim())
+      missing.push(`รายการที่ ${k + 1}: ราคาที่สั่งซื้อ ${fmt(u.hi)} สูงกว่าราคาประวัติเก่า ${fmt(u.prev)} — ระบุเหตุผลที่ซื้อแม้ราคาสูงกว่าเดิม · Reason for buying above the previous price`);
+  });
   if (!files.length) missing.push('แนบใบเสนอราคาอย่างน้อย 1 ไฟล์ · Attach at least one quotation file');
   files.filter((f) => !isPdfFile(f)).forEach((f) => missing.push(`ไฟล์แนบ “${f.name}” ไม่ใช่ PDF — ลบแล้วแนบใหม่เป็น PDF · Attachments must be PDF`));
   approvers.filter((a) => a.sign_mode !== 'wet').forEach((a) => {
@@ -478,6 +482,8 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
       // only a ✓ moved away from the cheapest vendor is stored; the server ticks the cheapest itself
       award: c.awards[i]?.override && !c.awards[i].split ? c.awards[i].pick : null,
       award_reason: c.awards[i]?.override ? it.award_reason.trim() : '',
+      // 0023: kept only while the price bought is above the previous price
+      price_up_reason: c.priceUp[i] ? it.up_reason.trim().slice(0, 500) : '',
       // แบ่งซื้อ is sent as typed (also while incomplete, so a draft keeps it)
       split: it.split && !d.no_comp ? it.split.map((q, v) => ({ v, qty: num(q) })).filter((x) => x.qty > 0) : null,
     }));
@@ -695,6 +701,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
       // as the server stores them: before VAT, plus the prices as quoted for Incl. VAT items
       unit_price: c.lines[i].upEx, net_price: c.lines[i].netEx, ...(c.modes[i] === 'inc' ? { price_in: c.lines[i].up, net_in: c.lines[i].net } : {}), line_total: c.lines[i].line, prev_diff_pct: c.lines[i].pct,
       award: c.awards[i].pick, award_auto: c.awards[i].best, award_line: c.awards[i].line, award_reason: c.awards[i].override ? d.items[i].award_reason : '',
+      price_up_reason: c.priceUp[i] ? d.items[i].up_reason : '',
       split: c.awards[i].split ? c.awards[i].split.map((x) => ({ v: x.v, qty: x.qty, line: x.line, pct: x.pct })) : null })),
     delivery: fixDelivery(d.delivery),
     credit_days: parseDays(d.credit_days).days, lead_days: parseDays(d.lead_days).days, warranty: d.warranty, report_no: d.report_no, report_date: d.report_date || null,
@@ -931,6 +938,17 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
                         onPaste={(e) => pasteDown(e, (k, v) => setItem(k, { report_no: normPr(v) }), i)} />
                     </label>
                   </div>
+                  {c.priceUp[i] && (
+                    // 0023: buying above the previous price needs a reason (no previous price = no check)
+                    <div className="up-box" id={`upb${i}`}>
+                      <label className="f" htmlFor={`upr${i}`}>
+                        <span>⚠ ราคาที่สั่งซื้อ <b>{fmt(c.priceUp[i]!.hi)}</b> สูงกว่าราคาประวัติเก่า <b>{fmt(c.priceUp[i]!.prev)}</b> (+{c.priceUp[i]!.pct?.toFixed(2)}%) — เหตุผลที่สั่งซื้อแม้ราคาสูงกว่าเดิม <span className="req">*</span></span>
+                        <input className="in" id={`upr${i}`} value={it.up_reason} maxLength={500} aria-invalid={tried && !it.up_reason.trim()}
+                          placeholder="เช่น วัตถุดิบปรับราคาขึ้นทั้งตลาด / ผู้ขายเดิมไม่มีของ / ต้องการด่วน"
+                          onChange={(e) => setItem(i, { up_reason: e.target.value })} />
+                      </label>
+                    </div>
+                  )}
                   <div className="item-info" aria-live="polite">
                     {!key ? <span className="note">กรอก SKU แล้วชื่อสินค้าจะขึ้นมาเอง · Enter a SKU</span>
                       : !d.company_id ? <span className="note">เลือกบริษัทผู้ซื้อก่อน ระบบจะค้นหา SKU ในรายการของบริษัทนั้น · Choose the buyer company first</span>

@@ -1,6 +1,6 @@
 'use client';
 import { compDiscounts, compNets, compPrices, daysText, itemsOf, netOf, normDiscount, vatModeOf } from '@/lib/calc';
-import { vatNote } from './CompareSheet';
+import { upNote, vatNote } from './CompareSheet';
 import { dOnly, fmt, fmtQty, r2 } from '@/lib/format';
 import type { DeliverySlot, LineItem, RequestRow } from '@/lib/types';
 
@@ -83,6 +83,7 @@ export function ItemsTable({ r }: { r: RequestRow }) {
             </div>
             {it.description && <div className="note m-desc">{it.description}</div>}
             {vatNote(it) && <div className="note vat-note">{vatNote(it)}</div>}
+            {upNote(it) && <div className="note vat-note">{upNote(it)}</div>}
             <dl className="m-kv">
               <div><dt>จำนวน</dt><dd>{fmtQty(it.qty)} {it.unit}</dd></div>
               {sp.length ? <div><dt>ราคา/หน่วย</dt><dd>แบ่งซื้อ</dd></div> : <div><dt>ราคา/หน่วย ก่อน VAT</dt><dd>{fmt(b.unit)}{b.disc ? <span className="note"> ลด {b.disc} → <b>{fmt(net)}</b></span> : null}</dd></div>}
@@ -139,6 +140,7 @@ export function ItemsTable({ r }: { r: RequestRow }) {
                   {it.brand && <span className="chip st-draft" style={{ marginLeft: 6 }}>{it.brand}</span>}
                   {it.description && <div className="note" style={{ whiteSpace: 'pre-wrap', color: 'var(--ink-2)' }}>{it.description}</div>}
                   {vatNote(it) && <div className="note vat-note">{vatNote(it)}</div>}
+                  {upNote(it) && <div className="note vat-note">{upNote(it)}</div>}
                   {it.report_no && <div className="note" style={{ color: 'var(--ink-2)' }}>เลขที่ใบขอซื้อ {it.report_no}</div>}
                   {multi && (
                     <div className="note" style={{ color: 'var(--sage-ink)', fontWeight: 600 }}>

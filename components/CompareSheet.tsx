@@ -14,6 +14,9 @@ export function vatNote(it: { vat_mode?: string; price_in?: number; net_in?: num
   return '';
 }
 
+/** 0023: printed under the item when it was bought above the previous price */
+export const upNote = (it: { price_up_reason?: string }) => (it.price_up_reason?.trim() ? `เหตุผลที่ซื้อแม้ราคาสูงกว่าราคาประวัติเก่า: ${it.price_up_reason.trim()}` : '');
+
 /** Turn a request into the data of the landscape comparison sheet. */
 export function useSheetData(r: RequestRow, steps: RequestStep[], draft: boolean, rev: number): SheetData {
   const { company, companies, logoUrl, deptTh, name, people, posTh, positions } = useApp();
@@ -153,7 +156,7 @@ export function useSheetData(r: RequestRow, steps: RequestStep[], draft: boolean
       prevVendor: it.prev_vendor || '',
       prevDate: it.prev_date || null,
       reportNo: it.report_no || '',
-      vatNote: vatNote(it),
+      vatNote: [vatNote(it), upNote(it)].filter(Boolean).join('\n'),
       award: award[k],
       split: splitOf(k).length ? splitOf(k) : null,
     })),

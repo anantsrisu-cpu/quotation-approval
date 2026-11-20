@@ -21,6 +21,8 @@ export interface DraftItem {
   split: string[] | null;
   /** 0021: prices typed before VAT (ex), including VAT (inc) or item without VAT (zero) — for every vendor */
   vat: VatMode;
+  /** 0023: why buy above the previous price (required only then) */
+  up_reason: string;
 }
 /** Comparison vendor as typed: one unit price and discount per line item, same order as the items. */
 export interface DraftComp {
@@ -33,7 +35,7 @@ export interface DraftComp {
   delivery: DeliverySlot[];
 }
 
-export const blankItem = (unit = 'ชิ้น'): DraftItem => ({ sku: '', description: '', qty: '1', unit, unit_price: '', discount: '', prev_price: '', prev_vendor: '', prev_date: '', brand: '', report_no: '', award: null, award_reason: '', split: null, vat: 'ex' });
+export const blankItem = (unit = 'ชิ้น'): DraftItem => ({ sku: '', description: '', qty: '1', unit, unit_price: '', discount: '', prev_price: '', prev_vendor: '', prev_date: '', brand: '', report_no: '', award: null, award_reason: '', split: null, vat: 'ex', up_reason: '' });
 export const blankComp = (n: number): DraftComp => ({ vendor: '', prices: Array(n).fill(''), discounts: Array(n).fill(''), credit_days: '', lead_days: '', warranty: '', delivery: [] });
 
 export const VAT_MODES: { v: VatMode; label: string; th: string }[] = [
@@ -120,6 +122,7 @@ export function calcItems(items: DraftItem[], vatRate: number, comps: DraftComp[
     return { vendor: c.vendor, lines: cl, sub: csub, total: ctot, diff: multi ? null : r2(ctot - q1Total), complete, quoted };
   });
   const netAt = (v: number, k: number) => (v === 0 ? lines[k].net : cs[v - 1]?.lines[k]?.net ?? 0);
+  const netExAt = (v: number, k: number) => (v === 0 ? lines[k].netEx : cs[v - 1]?.lines[k]?.netEx ?? 0);
   const usable = (v: number, k: number) => {
     const x = v === 0 ? lines[k] : cs[v - 1]?.lines[k];
     return !!x && x.up > 0 && !x.discErr;
@@ -153,6 +156,13 @@ export function calcItems(items: DraftItem[], vatRate: number, comps: DraftComp[
     const line = pick < 0 ? 0 : pick === 0 ? l.line : cs[pick - 1].lines[k].line;
     return { best, pick, line, override: pick !== best, split: null as null | { v: number; qty: number; line: number; pct: number; ok: boolean }[], sum: l.q, splitErr: null as string | null };
   });
+  // 0023: the (highest) price bought at, before VAT, against the previous price: higher needs a reason
+  const priceUp = awards.map((a, k) => {
+    const prev = lines[k].prev;
+    const nets = a.split ? a.split.filter((x) => x.ok).map((x) => netExAt(x.v, k)) : a.pick >= 0 ? [netExAt(a.pick, k)] : [];
+    const hi = nets.length ? Math.max(...nets) : 0;
+    return prev != null && prev > 0 && hi > prev ? { hi, prev, pct: prevPct(hi, prev) } : null;
+  });
   const sub = r2(awards.reduce((s, a) => s + a.line, 0));
   // VAT only on the items that have VAT (VAT 0 items are left out)
   const vatable = vatOn(awards.map((a) => a.line));
@@ -164,7 +174,7 @@ export function calcItems(items: DraftItem[], vatRate: number, comps: DraftComp[
   /** items bought (wholly or partly) from vendor v */
   const countFor = (v: number) => awards.filter((a) => (a.split ? a.split.some((x) => x.v === v) : a.pick === v)).length;
   const q1Quoted = lines.filter((l) => l.up > 0).length;
-  return { lines, sub, vatable, vat, total, q1Sub, q1Total, q1Quoted, comps: cs, awards, byVendor, countFor, modes };
+  return { lines, sub, vatable, vat, total, q1Sub, q1Total, q1Quoted, comps: cs, awards, byVendor, countFor, modes, priceUp };
 }
 
 /** Line items of a request (older single-item requests are shown as one line). */
