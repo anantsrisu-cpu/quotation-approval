@@ -376,3 +376,20 @@ table.cmp tr.why.split td{background:var(--sage-bg)}
 .up-box{border:1px solid var(--warn-line);background:var(--warn-bg);border-radius:10px;padding:10px 12px}
 .up-box .f{white-space:normal;color:var(--warn)}
 .up-box .in{color:var(--ink)}
+
+/* 0024 presence */
+.pres-dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:#9a918a;flex:none;vertical-align:middle}
+.pres-dot.online{background:#2f9e44;box-shadow:0 0 0 3px rgba(47,158,68,.18)}
+.pres-dot.lost{background:#d6332f;box-shadow:0 0 0 3px rgba(214,51,47,.18)}
+.pres-dot.offline,.pres-dot.never{background:#b3aaa2}
+.pres-me{display:inline-flex;align-items:center;gap:6px}
+.pres-me.on .pres-dot{background:#40c057;box-shadow:0 0 0 3px rgba(64,192,87,.3)}
+.pres-me.off .pres-dot{background:#ff5a52;box-shadow:0 0 0 3px rgba(255,90,82,.35);animation:pres-blink 1.2s ease-in-out infinite}
+.pres-me .pres-txt{color:#ffd2cf;font-weight:600}
+@keyframes pres-blink{50%{opacity:.35}}
+@media (prefers-reduced-motion:reduce){.pres-me.off .pres-dot{animation:none}}
+.pres-name{display:inline-flex;align-items:center;gap:8px}
+.pres-note.online{color:#2b8a3e}
+.pres-note.lost{color:var(--bad);font-weight:600}
+.pres-sum{display:flex;flex-wrap:wrap;align-items:center;gap:8px 20px;margin-bottom:12px}
+.pres-sum>span:not(.note){display:inline-flex;align-items:center;gap:6px}

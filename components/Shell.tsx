@@ -7,6 +7,7 @@ import { ROLE_TH, dt } from '@/lib/format';
 import { Loading } from './ui';
 import { InstallBanner, useCanInstall } from './Pwa';
 import { MaintenanceGate } from './Maintenance';
+import { PresenceDot } from './Presence';
 
 function NavLink({ href, th, en, count, exact }: { href: string; th: string; en: string; count?: number; exact?: boolean }) {
   const path = usePathname();
@@ -211,6 +212,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
           <span><b>ระบบอนุมัติใบเสนอราคา</b><small>Quotation Approval</small></span>
         </Link>
         <span className="user">
+          <PresenceDot />
           <span><b>{me.name || me.email}</b>{active && me.roles.length > 0 && <> · {me.roles.map((r) => ROLE_TH[r]).join('/')}</>}</span>
         </span>
         {active && <Bell />}

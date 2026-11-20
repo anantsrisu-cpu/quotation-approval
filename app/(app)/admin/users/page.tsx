@@ -5,6 +5,7 @@ import { useApp } from '@/components/AppProvider';
 import { AdminGate } from '@/components/AdminGate';
 import { SignaturePad, imageToSignature, type PadHandle } from '@/components/SignaturePad';
 import { PageHead } from '@/components/ui';
+import { PRESENCE_TH, agoTh, usePresence, type PresenceRow, type PresenceStatus } from '@/components/Presence';
 import { ROLE_TH } from '@/lib/format';
 import type { Profile, ProfileStatus, Role, UserInvite } from '@/lib/types';
 
@@ -266,6 +267,10 @@ function Users() {
   }
   const [q, setQ] = useState('');
   const [st, setSt] = useState<'all' | ProfileStatus>('active');
+  // 0024: who is online (null = SQL 0024 not run yet)
+  const pres = usePresence();
+  const presOf = (id: string): PresenceStatus => pres?.[id]?.status || 'never';
+  const presCount = (s: PresenceStatus) => Object.values(people).filter((p) => p.status === 'active' && presOf(p.id) === s).length;
   const [sigIds, setSigIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -324,6 +329,14 @@ function Users() {
         </div>
         <span className="note">ผู้ใช้ใหม่เพิ่มเข้ามาเองเมื่อเข้าสู่ระบบด้วย Microsoft 365 ครั้งแรก หรือกด &quot;สร้างบัญชีล่วงหน้า&quot; เพื่อตั้งบทบาทและลายเซ็นไว้ก่อน · New people appear after their first Microsoft 365 sign-in, or pre-create their account.</span>
       </div>
+      {pres && (
+        <div className="pres-sum" role="status" id="pres-sum">
+          <span><span className="pres-dot online" aria-hidden="true" /> ออนไลน์ <b>{presCount('online')}</b></span>
+          <span><span className="pres-dot lost" aria-hidden="true" /> ขาดการเชื่อมต่อ (เน็ตหลุด) <b>{presCount('lost')}</b></span>
+          <span><span className="pres-dot offline" aria-hidden="true" /> ออฟไลน์ <b>{presCount('offline') + presCount('never')}</b></span>
+          <span className="note">อัปเดตทุก 30 วินาที · เขียว = เปิดแอปอยู่ · แดง = เปิดค้างไว้แต่ขาดการเชื่อมต่อเกิน 2 นาที (เน็ตหลุด / เครื่องพักหรือปิดโดยไม่ปิดหน้า) · เทา = ปิดหน้าแล้วหรือไม่ได้ใช้เกิน 30 นาที</span>
+        </div>
+      )}
       <div className="row">
         <div className="grow">
           <div className="tw">
@@ -333,8 +346,12 @@ function Users() {
                 {list.map((u) => (
                   <tr key={u.id} style={sel === u.id ? { background: 'var(--soft)' } : undefined}>
                     <td>
-                      <button className="link-btn" style={{ textAlign: 'left', fontWeight: 500 }} onClick={() => { setInv(null); setSel(u.id); }}>{u.name || u.email}</button>
+                      <span className="pres-name">
+                        {pres && <span className={`pres-dot ${presOf(u.id)}`} id={`pres-${u.id}`} title={presText(pres[u.id])} aria-label={presText(pres[u.id])} role="img" />}
+                        <button className="link-btn" style={{ textAlign: 'left', fontWeight: 500 }} onClick={() => { setInv(null); setSel(u.id); }}>{u.name || u.email}</button>
+                      </span>
                       <div className="note">{u.title || '—'} · {deptTh(u.dept)}</div>
+                      {pres && <div className={`note pres-note ${presOf(u.id)}`}>{presText(pres[u.id])}</div>}
                     </td>
                     <td>{u.roles.map((r) => <span key={r} className="chip st-draft" style={{ marginRight: 4 }}>{ROLE_TH[r]}</span>)}</td>
                     <td>{u.position ? posTh(u.position) : '—'}</td>
@@ -359,6 +376,15 @@ function Users() {
       </div>
     </>
   );
+}
+
+/** "ออนไลน์ · ตั้งแต่ 09:12 · หน้า /inbox" */
+function presText(r?: PresenceRow) {
+  if (!r) return `${PRESENCE_TH.never} (ยังไม่ได้เปิดแอปหลังอัปเดต)`;
+  const at = new Date(r.last_seen).toLocaleString('th-TH', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  if (r.status === 'online') return `${PRESENCE_TH.online} · ตั้งแต่ ${new Date(r.since).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}${r.page ? ` · หน้า ${r.page}` : ''}`;
+  if (r.status === 'lost') return `${PRESENCE_TH.lost} · ติดต่อได้ล่าสุด ${agoTh(r.seconds_ago)}`;
+  return `${PRESENCE_TH.offline} · ใช้งานล่าสุด ${at} (${agoTh(r.seconds_ago)})`;
 }
 
 export default function Page() {
