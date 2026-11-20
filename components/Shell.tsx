@@ -8,6 +8,7 @@ import { Loading } from './ui';
 import { InstallBanner, useCanInstall } from './Pwa';
 import { MaintenanceGate } from './Maintenance';
 import { PresenceDot } from './Presence';
+import { RefreshButton } from './RefreshButton';
 
 function NavLink({ href, th, en, count, exact }: { href: string; th: string; en: string; count?: number; exact?: boolean }) {
   const path = usePathname();
@@ -216,7 +217,10 @@ export function Shell({ children }: { children: React.ReactNode }) {
           <span><b>{me.name || me.email}</b>{active && me.roles.length > 0 && <> · {me.roles.map((r) => ROLE_TH[r]).join('/')}</>}</span>
         </span>
         {active && <Bell />}
-        <button className="out" onClick={signOut}>ออกจากระบบ · Sign out</button>
+        <span className="top-btns">
+          <RefreshButton />
+          <button className="out" onClick={signOut}>ออกจากระบบ · Sign out</button>
+        </span>
       </header>
       <div className={`shell${active && navOpen ? ' nav-open' : ' nav-closed'}`}>
         {active && narrow && navOpen && <div className="nav-backdrop" onClick={() => setNavOpen(false)} aria-hidden="true" />}

@@ -11,6 +11,7 @@ import type { DeliverySlot } from '@/lib/types';
 import { PR_EXAMPLE, PR_FORMAT, PURP, SUBJ, SUBJ_EN, fileSize, fmt, isPr, normPr, num } from '@/lib/format';
 import { UnitField } from './UnitField';
 import { isPdfFile } from '@/lib/mergePdf';
+import { setDirty } from '@/lib/dirty';
 import type { ApproverPreview, LineItem, Product, RequestFile, RequestRow, RequestStep } from '@/lib/types';
 
 const MAX_FILE = 25 * 1024 * 1024;
@@ -153,6 +154,8 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
   const [tried, setTried] = useState(false);
   /** 0019: the buyer the draft is handed to (null = not handed); asBuyer = I am that buyer, opening someone else's draft */
   const [handedTo, setHandedTo] = useState<string | null>(null);
+  // typing that is not saved yet (for the Refresh button in the top bar)
+  useEffect(() => () => setDirty(false), []);
   const [asBuyer, setAsBuyer] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
 
@@ -528,6 +531,11 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
 
   /** Insert or update the draft; returns its id. */
   async function saveDraft(silent = false): Promise<string | null> {
+    const r = await saveDraftInner(silent);
+    if (r) setDirty(false);
+    return r;
+  }
+  async function saveDraftInner(silent: boolean): Promise<string | null> {
     if (!d?.preparer_id) {
       toast('bad', 'เลือกผู้จัดทำก่อน · Choose the preparer first', '');
       return null;
@@ -739,7 +747,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
   };
 
   return (
-    <>
+    <div className="contents" onInputCapture={() => setDirty(true)} onChangeCapture={() => setDirty(true)}>
       <PageHead
         title={id ? (no ? `แก้ไขคำขอ ${no}` : 'แก้ไขฉบับร่าง') : 'สร้างคำขออนุมัติใหม่'}
         lead="New approval request · เลขที่คำขอ = เลขที่ใบขอซื้อที่กรอก · the request number is the PR no."
@@ -1339,6 +1347,6 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
           </div>
         </Modal>
       )}
-    </>
+    </div>
   );
 }

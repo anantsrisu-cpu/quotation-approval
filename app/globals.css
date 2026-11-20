@@ -156,7 +156,7 @@ table.t tr.click{cursor:pointer} table.t tr.click:hover td{background:var(--soft
 .sig-box{border:1px solid var(--beige);border-radius:10px;background:var(--softer);height:84px;display:grid;place-items:center}
 
 /* overlay */
-.ov{position:fixed;inset:0;z-index:40;background:rgba(80,45,30,.45);display:flex;align-items:flex-start;justify-content:center;padding:16px;overflow-y:auto;white-space:normal;text-align:left}
+.ov{position:fixed;inset:0;z-index:40;background:rgba(80,45,30,.45);display:flex;align-items:flex-start;justify-content:center;padding:16px;overflow-y:auto;white-space:normal;text-align:left;color:var(--ink);font-size:15px}
 .dlg{background:var(--bg);border-radius:14px;width:min(900px,100%);margin-block:8px;box-shadow:0 16px 48px rgba(80,45,30,.35);display:flex;flex-direction:column;overflow:hidden}
 .dlg.small{width:min(520px,100%);background:#fff}
 .dlg-h{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:14px 18px;background:#fff;border-bottom:1px solid var(--beige)}
@@ -393,3 +393,12 @@ table.cmp tr.why.split td{background:var(--sage-bg)}
 .pres-note.lost{color:var(--bad);font-weight:600}
 .pres-sum{display:flex;flex-wrap:wrap;align-items:center;gap:8px 20px;margin-bottom:12px}
 .pres-sum>span:not(.note){display:inline-flex;align-items:center;gap:6px}
+
+/* refresh button (phones have no F5) */
+.top-btns{display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap}
+.top .out.refresh{display:inline-flex;align-items:center;gap:6px}
+.top .out.refresh svg{flex:none}
+.top .out.refresh.spin svg{animation:rf-spin .8s linear infinite}
+@keyframes rf-spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.top .out.refresh.spin svg{animation:none}}
+.contents{display:contents}
