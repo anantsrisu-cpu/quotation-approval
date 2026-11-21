@@ -28,6 +28,7 @@ A quotation approval workflow. A preparer enters the request and attaches the qu
 - สร้างคำขอ: เรื่อง (สั่งซื้อเพื่อสต๊อค / สั่งซื้อทั่วไป / สั่งจ้าง), SKU (ชื่อสินค้าขึ้นอัตโนมัติ), ฝ่ายที่ขอซื้อ, ซื้อเพื่อ (ซ่อมแซม / ทดแทนของเดิม / Stock), ผู้ขาย, ผู้ซื้อ, บริษัทผู้ซื้อ
 - ราคาต่อหน่วยก่อน VAT × จำนวน = มูลค่ารวม + VAT = ยอดสุทธิ (คำนวณสด และคำนวณซ้ำที่เซิร์ฟเวอร์)
 - **แยก/รวมบริษัทในหัวตาราง**: ตั้งค่าระบบ → การ์ด **แยก / รวมบริษัทในหัวตาราง** · แต่ละกล่อง = หัวตาราง 1 แบบฟอร์ม พร้อมตัวอย่าง · ปุ่ม **↗ แยกออก** ให้บริษัทนั้นมีแบบฟอร์มของตัวเอง (เช่น เอจี (ประเทศไทย)) · เมนู **⇄ รวมกับแบบฟอร์ม…** รวมทั้งกล่องเข้ากับอีกแบบฟอร์ม (เช่น ไทยรุ่งเรือง คอร์ปอเรชั่น + ไทยรุ่งเรือง ไบโอ-เอ็นเนอร์จี้) · บันทึกทันที · PDF ที่อนุมัติแล้วไม่เปลี่ยน
+- **อนุมัติแทน · ช่วงไม่อยู่**: ตั้งค่าระบบ → ตำแหน่งผู้อนุมัติ → ติ๊ก **อนุมัติแทนตำแหน่ง** (เช่น รักษาการผู้จัดการฝ่ายจัดซื้อ แทน ผู้อำนวยการฝ่ายจัดซื้อ) แล้วที่ **ผู้อนุมัติตามบริษัท** เปิดสวิตช์ **อนุมัติแทน · ช่วงไม่อยู่** ของผู้อนุมัติคนนั้น (บันทึกทันที) · ต้องตั้งทั้ง 2 อย่าง ไม่เช่นนั้นไม่มีผล · เมื่อผู้อนุมัติที่เปิดไว้อนุมัติขั้นของตัวเอง ระบบใส่ลายเซ็นของเขาในกรอบของตำแหน่งที่แทน พร้อม “(แทน)” ข้างลายเซ็น (ชื่อใต้กรอบยังเป็นของตำแหน่งนั้น) — ทั้งตำแหน่งลายเซ็นสด และตำแหน่งที่อนุมัติในระบบที่อยู่ลำดับถัดไป (ผู้อนุมัติเดิมได้รับแจ้งเตือน) · ประวัติคำขอบันทึกทุกครั้ง · ปิดสวิตช์เมื่อกลับมา
 - **โลโก้บริษัท**: อัปโหลดแล้วระบบย่อเหลือด้านยาวไม่เกิน 1,000 px อัตโนมัติ (พอสำหรับหน้าจอและ PDF) · โลโก้เดิมที่ใหญ่เกินมีปุ่ม **⤓ ย่อขนาดโลโก้** ในตั้งค่าระบบ — โลโก้ใหญ่ (เช่น 4000 px) ทำให้เบราว์เซอร์ต้องถอดรหัสรูปซ้ำระหว่างเลื่อนหน้า หน้าเว็บจึงกระตุก/มีช่องขาว
 - **ปุ่มรีเฟรช** ข้างปุ่มออกจากระบบ (แทน F5 บนโทรศัพท์และแอปที่ติดตั้งไว้) · ถ้ามีข้อมูลในแบบฟอร์มคำขอที่ยังไม่บันทึก ระบบถามก่อนรีเฟรช
 - **สถานะออนไลน์**: ทุกคนเห็นจุดข้างชื่อตัวเองบนแถบด้านบน — 🟢 เชื่อมต่อแล้ว · 🔴 ขาดการเชื่อมต่อ (เน็ตหลุด/เข้าเซิร์ฟเวอร์ไม่ได้; งานบนหน้าจอยังอยู่ ระบบเชื่อมต่อใหม่เอง) · ผู้ดูแลเห็นสถานะของทุกคนที่หน้า **บัญชีผู้ใช้และลายเซ็น** (อัปเดตทุก 30 วินาที): 🟢 ออนไลน์ (พร้อมหน้าที่เปิดอยู่) · 🔴 เปิดค้างไว้แต่ขาดการเชื่อมต่อเกิน 2 นาที · ⚪ ปิดหน้าแล้วหรือไม่ได้ใช้เกิน 30 นาที (พร้อมเวลาใช้งานล่าสุด)
@@ -110,6 +111,7 @@ Every state change goes through database functions, so amounts, approvers and si
    ต่อด้วย [`supabase/migrations/0022_sheet_company_groups.sql`](supabase/migrations/0022_sheet_company_groups.sql) กด **Run** (กลุ่มบริษัทบนหัวตารางเปรียบเทียบ — ครั้งแรกทุกบริษัทอยู่กลุ่มเดียวกัน หัวตารางจึงเหมือนเดิมจนกว่าจะตั้งกลุ่ม)
    ต่อด้วย [`supabase/migrations/0023_price_up_reason.sql`](supabase/migrations/0023_price_up_reason.sql) กด **Run** (เหตุผลเมื่อซื้อแพงกว่าราคาประวัติเก่า)
    ต่อด้วย [`supabase/migrations/0024_user_presence.sql`](supabase/migrations/0024_user_presence.sql) กด **Run** (สถานะออนไลน์ของผู้ใช้ สำหรับผู้ดูแล)
+   ต่อด้วย [`supabase/migrations/0025_acting_approver.sql`](supabase/migrations/0025_acting_approver.sql) กด **Run** (อนุมัติแทน ช่วงไม่อยู่)
    > ระบบที่ใช้งานอยู่แล้ว: รันเฉพาะไฟล์ที่ยังไม่เคยรัน ตามลำดับเลข ข้อมูลเดิมถูกแปลงให้อัตโนมัติ และรันซ้ำได้โดยไม่เสียหาย
 4. ไปที่ **Project Settings → API** (หรือ **Data API / API Keys**) จดค่า:
    - **Project URL** → ใช้เป็น `NEXT_PUBLIC_SUPABASE_URL`
@@ -267,6 +269,7 @@ psql -d qa_test -v ON_ERROR_STOP=1 -f supabase/tests/99c_vat_mode_test.sql      
 psql -d qa_test -v ON_ERROR_STOP=1 -f supabase/tests/99d_sheet_company_groups_test.sql # runs 0022 itself; ends with: ALL 0022 TESTS PASSED
 psql -d qa_test -v ON_ERROR_STOP=1 -f supabase/tests/99e_price_up_reason_test.sql     # runs 0023 itself; ends with: ALL 0023 TESTS PASSED
 psql -d qa_test -v ON_ERROR_STOP=1 -f supabase/tests/99f_user_presence_test.sql      # runs 0024 itself; ends with: ALL 0024 TESTS PASSED
+psql -d qa_test -v ON_ERROR_STOP=1 -f supabase/tests/99g_acting_approver_test.sql    # runs 0025 itself; ends with: ALL 0025 TESTS PASSED
 ```
 ครอบคลุม · Covers: first admin, applications, self-promotion blocked, server-side amounts and tiers, approver resolution by department, signatures required, forward rules, reject → reopen → resend (keeps number), admin remind/reassign/cancel, letter path rules, visibility for outsiders, disabled accounts.
 

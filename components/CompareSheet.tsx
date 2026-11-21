@@ -90,11 +90,13 @@ export function useSheetData(r: RequestRow, steps: RequestStep[], draft: boolean
     heading,
     range: note(s.position),
     caption: 'Approved by',
-    name: name(s.signer_id || s.approver_id),
+    // 0025: approved by the acting approver: the box keeps the absent approver's name, "(แทน)" by the signature
+    name: s.acting ? name(s.approver_id) : name(s.signer_id || s.approver_id),
     position: posTh(s.position),
     date: s.status === 'approved' ? dOnly(s.acted_at) : '',
     signature: s.status === 'approved' ? s.signature : null,
-    note: s.on_behalf_of ? `อนุมัติแทน ${name(s.on_behalf_of)}` : '',
+    note: s.on_behalf_of && !s.acting ? `อนุมัติแทน ${name(s.on_behalf_of)}` : '',
+    acting: !!s.acting && s.status === 'approved',
   });
   // one box per approver position (from the plan saved at sending); older requests: one per step
   const plan = r.sign_plan && r.sign_plan.length ? r.sign_plan : null;
@@ -110,8 +112,10 @@ export function useSheetData(r: RequestRow, steps: RequestStep[], draft: boolean
           // wet: the name set in settings (saved with the request; older requests: the current setting)
           name: (e.mode === 'wet' && (e.name || positions.find((p) => p.code === e.position)?.wet_name?.trim())) || (e.approver_id ? name(e.approver_id) : ''),
           position: posTh(e.position),
-          date: '',
-          signature: null,
+          // 0025: a hand-signing box signed by the acting approver
+          date: e.acting_sig ? dOnly(e.acting_at) : '',
+          signature: e.acting_sig || null,
+          acting: !!e.acting_sig,
           // not needed for this amount: crossed out once the request is fully approved
           state: e.mode === 'wet' ? 'wet' : e.mode === 'skip' && r.status === 'approved' ? 'skip' : undefined,
         };

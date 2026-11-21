@@ -55,6 +55,8 @@ export interface SheetSigner {
   date: string;
   signature?: string | null;
   note?: string; // อนุมัติแทน … (approvers only)
+  /** 0025: signed by the acting approver: "(แทน)" by the signature */
+  acting?: boolean;
   /** skip = not needed for this amount (crossed out) · wet = signs by hand on the printout */
   state?: 'skip' | 'wet';
 }
@@ -138,6 +140,9 @@ const CSS = `
 .cs-sig .h b{font-weight:600}
 .cs-sig .b{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;padding:2px 4px 4px;gap:1px}
 .cs-sig img{height:34px;max-width:130px;object-fit:contain}
+.cs-sig .sg{display:flex;align-items:flex-end;justify-content:center;gap:4px;max-width:100%}
+.cs-sig .sg img{max-width:100px}
+.cs-sig .act{font-weight:700;font-size:11px;white-space:nowrap;padding-bottom:2px}
 .cs-sig .ph{height:34px;display:grid;place-items:center;color:#999}
 .cs-wm{position:absolute;top:45%;left:50%;transform:translate(-50%,-50%) rotate(-18deg);font-size:120px;font-weight:700;color:rgba(172,137,121,.14);white-space:nowrap;pointer-events:none}
 `;
@@ -303,7 +308,7 @@ function bottomHtml(d: SheetData, lastPage: number | null = null) {
 ${d.signers
   .map(
     (s) => `<div class="cs-sig${s.state === 'skip' ? ' skip' : ''}"><div class="h"><b>${esc(s.heading)}</b>${s.range ? `<br>${esc(s.range)}` : ''}<br>${esc(s.caption)}${s.state === 'wet' ? ' <span class="wet">· ลายเซ็นสด</span>' : ''}</div>
-<div class="b">${s.state === 'skip' ? '<canvas class="x" role="img" aria-label="ขีดฆ่า ไม่ต้องลงนามในวงเงินนี้"></canvas>' : s.signature ? `<img src="${esc(s.signature)}" alt="ลายเซ็น">` : '<span class="ph"></span>'}<span>(${esc(s.name || '..........................')})</span>
+<div class="b">${s.state === 'skip' ? '<canvas class="x" role="img" aria-label="ขีดฆ่า ไม่ต้องลงนามในวงเงินนี้"></canvas>' : s.signature ? `<span class="sg"><img src="${esc(s.signature)}" alt="ลายเซ็น">${s.acting ? '<b class="act">(แทน)</b>' : ''}</span>` : '<span class="ph"></span>'}<span>(${esc(s.name || '..........................')})</span>
 <span>${esc(s.position)}</span>${s.note ? `<span style="font-size:.9em">${esc(s.note)}</span>` : ''}<span>วันที่ ${esc(s.date || '____________')}</span></div></div>`,
   )
   .join('')}</div>`;

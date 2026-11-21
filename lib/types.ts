@@ -14,6 +14,9 @@ export interface Profile {
   status: ProfileStatus;
   /** companies this approver signs for (empty = every company) */
   companies?: string[];
+  /** 0025: acting approver switched on (อนุมัติแทน ช่วงไม่อยู่) */
+  acting_on?: boolean;
+  acting_since?: string | null;
   /** receive notifications by e-mail (0018) */
   email_notify?: boolean;
   /** one more address for notification e-mails, same domain as `email` */
@@ -44,9 +47,13 @@ export interface Settings {
   maintenance_msg?: string;
   maintenance_at?: string | null;
 }
-export interface Position { code: string; th: string; en: string; sort: number; note?: string; sign_mode?: 'online' | 'wet'; wet_name?: string }
+export interface Position { code: string; th: string; en: string; sort: number; note?: string; sign_mode?: 'online' | 'wet'; wet_name?: string; /** 0025: positions this one may approve in place of (อนุมัติแทน) */ acting_for?: string[] }
 /** One approver position on the comparison sheet, saved when the request is sent. */
-export interface SignPlanEntry { position: string; mode: 'online' | 'wet' | 'skip'; step_no?: number; approver_id?: string | null; /** wet: name set for the position when sent (0016) */ name?: string | null }
+export interface SignPlanEntry {
+  position: string; mode: 'online' | 'wet' | 'skip'; step_no?: number; approver_id?: string | null; /** wet: name set for the position when sent (0016) */ name?: string | null;
+  /** 0025: a hand-signing box signed by an acting approver (แทน) */
+  acting_by?: string | null; acting_sig?: string | null; acting_at?: string | null;
+}
 export interface Tier { id: number; label: string; max_amount: number | null; steps: string[]; sort: number }
 export interface Department { id: string; th: string; en: string; sort: number; active: boolean }
 export interface Company {
@@ -142,6 +149,8 @@ export interface RequestStep {
   signature?: string | null;
   signer_id?: string | null;
   on_behalf_of?: string | null;
+  /** 0025: approved by an acting approver while the approver was away */
+  acting?: boolean;
 }
 
 export interface RequestRow {

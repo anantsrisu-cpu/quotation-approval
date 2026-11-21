@@ -81,6 +81,10 @@ function Positions() {
   const { sb, positions, tiers, run, toast, reloadRefs } = useApp();
   const [rows, setRows] = useState<(Position & { isNew?: boolean })[]>([]);
   useEffect(() => setRows(positions.map((p) => ({ ...p }))), [positions]);
+  // 0025: อนุมัติแทน (only once that SQL has been run)
+  const hasActing = positions.some((p) => 'acting_for' in p);
+  const toggleActing = (i: number, code: string, on: boolean) =>
+    setRows(rows.map((x, j) => (j === i ? { ...x, acting_for: on ? [...(x.acting_for || []), code] : (x.acting_for || []).filter((c) => c !== code) } : x)));
   async function save() {
     for (const p of rows) {
       if (!p.code || !p.th.trim()) return toast('bad', 'กรอกรหัสและชื่อตำแหน่งให้ครบ · Code and Thai name required', '');
@@ -90,9 +94,10 @@ function Positions() {
     if (dup) return toast('bad', `รหัสตำแหน่ง “${dup}” ซ้ำกัน · Duplicate code`, 'แก้รหัสของแถวที่เพิ่มใหม่ให้ไม่ซ้ำกับตำแหน่งที่มีอยู่ แล้วกดบันทึกอีกครั้ง · Give the new row a different code');
     // wet_name exists once SQL 0016 has been run
     const hasWet = positions.some((p) => 'wet_name' in p);
-    const { ok } = await run('save-positions', sb.from('positions').upsert(rows.map(({ code, th, en, sort, note, sign_mode, wet_name }) => ({
+    const { ok } = await run('save-positions', sb.from('positions').upsert(rows.map(({ code, th, en, sort, note, sign_mode, wet_name, acting_for }) => ({
       code, th: th.trim(), en: en.trim(), sort: Number(sort) || 0, note: (note || '').trim(), sign_mode: sign_mode || 'online',
       ...(hasWet ? { wet_name: (wet_name || '').trim() } : {}),
+      ...(hasActing ? { acting_for: (acting_for || []).filter((c) => c !== code && rows.some((x) => x.code === c)) } : {}),
     }))));
     if (ok) { toast('ok', 'บันทึกตำแหน่งแล้ว · Positions saved', ''); reloadRefs(); }
   }
@@ -151,6 +156,17 @@ function Positions() {
           <label className="f" style={{ flex: '1 1 80px' }}>ลำดับ<input className="in r" inputMode="numeric" value={p.sort} onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, sort: Number(e.target.value) || 0 } : x)))} /></label>
           {p.isNew ? <button className="icon-btn" onClick={() => setRows(rows.filter((_, j) => j !== i))} aria-label="ลบ">✕</button>
             : <button className="btn sm d" onClick={() => remove(p.code)} title="ลบได้เมื่อไม่มีผู้ใช้หรือคำขอใช้ตำแหน่งนี้">ลบ</button>}
+          {hasActing && rows.length > 1 && (
+            <fieldset className="acting-for" id={`af-${p.code || i}`}>
+              <legend>อนุมัติแทนตำแหน่ง (เมื่อเปิด “อนุมัติแทน ช่วงไม่อยู่”) · May approve in place of</legend>
+              {rows.filter((x) => x.code && x.code !== p.code).map((x) => (
+                <label key={x.code} className="check">
+                  <input type="checkbox" checked={(p.acting_for || []).includes(x.code)} onChange={(e) => toggleActing(i, x.code, e.target.checked)} />
+                  {x.th}{x.sign_mode === 'wet' ? ' (ลายเซ็นสด)' : ''}
+                </label>
+              ))}
+            </fieldset>
+          )}
         </div>
       ))}
     </Section>
@@ -795,14 +811,31 @@ function ApproverCompanies() {
   const { sb, positions, companies, tiers, run, toast, bump } = useApp();
   const [rows, setRows] = useState<Profile[] | null>(null);
   const [saved, setSaved] = useState<Record<string, string>>({});
+  const [acting, setActing] = useState(false); // SQL 0025 has been run
+  const [busyAct, setBusyAct] = useState<string | null>(null);
   useEffect(() => {
-    sb.from('profiles').select('id,email,name,title,dept,roles,position,status,companies').eq('status', 'active').contains('roles', ['approver'])
-      .then(({ data }) => {
-        const list = ((data as Profile[]) || []).map((p) => ({ ...p, companies: p.companies || [] }));
-        setRows(list);
-        setSaved(Object.fromEntries(list.map((p) => [p.id, (p.companies || []).slice().sort().join(',')])));
-      });
+    (async () => {
+      const cols = 'id,email,name,title,dept,roles,position,status,companies';
+      let res: { data: unknown; error: unknown } = await sb.from('profiles').select(`${cols},acting_on,acting_since`).eq('status', 'active').contains('roles', ['approver']);
+      setActing(!res.error);
+      if (res.error) res = await sb.from('profiles').select(cols).eq('status', 'active').contains('roles', ['approver']);
+      const list = ((res.data as Profile[]) || []).map((p) => ({ ...p, companies: p.companies || [] }));
+      setRows(list);
+      setSaved(Object.fromEntries(list.map((p) => [p.id, (p.companies || []).slice().sort().join(',')])));
+    })();
   }, [sb, bump]);
+  /** 0025: อนุมัติแทน ช่วงไม่อยู่ — saved at once */
+  async function setActingOn(p: Profile, on: boolean) {
+    setBusyAct(p.id);
+    const { ok } = await run('save-acting', sb.from('profiles').update({ acting_on: on }).eq('id', p.id));
+    setBusyAct(null);
+    if (!ok) return;
+    setRows((rs) => (rs || []).map((x) => (x.id === p.id ? { ...x, acting_on: on, acting_since: on ? new Date().toISOString() : null } : x)));
+    const covers = coversOf(p);
+    toast('ok', on ? `เปิดอนุมัติแทนแล้ว · ${p.name}` : `ปิดอนุมัติแทนแล้ว · ${p.name}`,
+      on ? `เมื่อ ${p.name} อนุมัติ จะลงนามแทน ${covers.join(', ')} ให้ด้วย (แสดง “(แทน)” ในตารางเปรียบเทียบ)` : 'กลับเป็นการอนุมัติตามปกติ');
+  }
+  const coversOf = (p: Profile) => (positions.find((x) => x.code === p.position)?.acting_for || []).map((c) => positions.find((x) => x.code === c)?.th || c);
   const order = (code: string | null) => positions.find((p) => p.code === code)?.sort ?? 9999;
   const cos = companies.filter((c) => c.active);
   const list = (rows || []).slice().sort((a, b) => order(a.position) - order(b.position) || a.name.localeCompare(b.name, 'th'));
@@ -818,7 +851,8 @@ function ApproverCompanies() {
     setSaved(Object.fromEntries(list.map((p) => [p.id, (p.companies || []).slice().sort().join(',')])));
   }
   // positions used by any tier that have nobody for a company
-  const used = Array.from(new Set(tiers.flatMap((t) => t.steps)));
+  // (hand-signing positions sign on paper: they need nobody in the app)
+  const used = Array.from(new Set(tiers.flatMap((t) => t.steps))).filter((c) => positions.find((x) => x.code === c)?.sign_mode !== 'wet');
   const gaps = cos.flatMap((c) =>
     used.filter((pos) => !list.some((p) => p.position === pos && (!(p.companies || []).length || (p.companies || []).includes(c.id))))
       .map((pos) => `${c.th}: ไม่มี${positions.find((x) => x.code === pos)?.th || pos}`));
@@ -828,15 +862,17 @@ function ApproverCompanies() {
         <button className="btn p sm" onClick={save} disabled={!changed.length}>บันทึก{changed.length ? ` (${changed.length})` : ''} · Save</button>
       </div>
       <span className="note">ติ๊กบริษัทที่ผู้อนุมัติแต่ละคนลงนามให้ ระบบเลือกผู้อนุมัติตามตำแหน่ง → บริษัทของคำขอ → ฝ่าย · <b>ไม่ติ๊กเลย = อนุมัติได้ทุกบริษัท</b> · คนที่ติ๊กบริษัทนั้นไว้จะถูกเลือกก่อนคนที่อนุมัติได้ทุกบริษัท</span>
+      {acting && <span className="note"><b>อนุมัติแทน · ช่วงไม่อยู่</b>: เปิดเมื่อผู้อนุมัติของตำแหน่งที่ตั้งไว้ (ตำแหน่งผู้อนุมัติ → “อนุมัติแทนตำแหน่ง”) ไม่อยู่ · เมื่อคนที่เปิดไว้อนุมัติขั้นของตัวเอง ระบบลงนามในกรอบของตำแหน่งนั้นให้ พร้อม “(แทน)” · บันทึกทันที · ปิดเมื่อกลับมาแล้ว</span>}
       {rows === null ? <div className="skeleton" /> : !list.length ? <p className="note" style={{ margin: 0 }}>ยังไม่มีผู้อนุมัติที่ใช้งาน · No active approvers</p> : (
         <div className="tw">
-          <table className="t" style={{ minWidth: 520 + cos.length * 120 }}>
+          <table className="t" style={{ minWidth: 520 + cos.length * 120 + (acting ? 220 : 0) }}>
             <thead>
               <tr>
                 <th>ตำแหน่ง · Position</th>
                 <th>ผู้อนุมัติ · Approver</th>
                 {cos.map((c) => <th key={c.id} style={{ textAlign: 'center' }}>{c.th}</th>)}
                 <th>ผล · Result</th>
+                {acting && <th>อนุมัติแทน · ช่วงไม่อยู่</th>}
               </tr>
             </thead>
             <tbody>
@@ -851,6 +887,21 @@ function ApproverCompanies() {
                     </td>
                   ))}
                   <td className="note">{(p.companies || []).length ? `เฉพาะ ${cos.filter((c) => (p.companies || []).includes(c.id)).length} บริษัทที่ติ๊ก` : 'ทุกบริษัท'}</td>
+                  {acting && (
+                    <td style={{ minWidth: 220 }}>
+                      {coversOf(p).length ? (
+                        <>
+                          <label className="acting-sw">
+                            <input type="checkbox" id={`act-${p.id}`} checked={!!p.acting_on} disabled={busyAct === p.id} onChange={(e) => setActingOn(p, e.target.checked)} />
+                            <span className={p.acting_on ? 'acting-on' : undefined}>{p.acting_on ? 'เปิด · กำลังอนุมัติแทน' : 'ปิด'}</span>
+                          </label>
+                          <div className="note">แทน: {coversOf(p).join(', ')}{p.acting_on && p.acting_since ? ` · ตั้งแต่ ${dt(p.acting_since)}` : ''}</div>
+                        </>
+                      ) : (
+                        <span className="note">ยังไม่ได้ตั้ง “อนุมัติแทนตำแหน่ง” ที่ตำแหน่ง{positions.find((x) => x.code === p.position)?.th || ''}</span>
+                      )}
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
