@@ -46,6 +46,9 @@ export interface Settings {
   maintenance?: boolean;
   maintenance_msg?: string;
   maintenance_at?: string | null;
+  /** 0027: locked after go-live — "delete every request" is refused for good */
+  prod_locked?: boolean;
+  prod_locked_at?: string | null;
 }
 export interface Position { code: string; th: string; en: string; sort: number; note?: string; sign_mode?: 'online' | 'wet'; wet_name?: string; /** 0025: positions this one may approve in place of (อนุมัติแทน) */ acting_for?: string[] }
 /** One approver position on the comparison sheet, saved when the request is sent. */

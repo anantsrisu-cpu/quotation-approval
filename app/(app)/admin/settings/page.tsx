@@ -738,11 +738,15 @@ function EmailNotify() {
 
 const RESET_WORD = 'ลบทั้งหมด';
 /** UAT clean-up before go-live: every request, its files and history; numbering restarts. */
+const LOCK_WORD = 'GO-LIVE';
 function ResetRequests() {
-  const { sb, run, toast, refresh, bump } = useApp();
+  const { sb, run, toast, refresh, bump, settings } = useApp();
   const [counts, setCounts] = useState<Record<string, number> | null>(null);
   const [word, setWord] = useState('');
+  const [lockWord, setLockWord] = useState('');
   const [busy, setBusy] = useState('');
+  const hasLock = !!settings && 'prod_locked' in settings; // SQL 0027 has been run
+  const locked = !!settings?.prod_locked;
   useEffect(() => {
     Promise.all(['draft', 'pending', 'approved', 'rejected', 'cancelled'].map((st) =>
       sb.from('requests').select('id', { count: 'exact', head: true }).eq('status', st).then(({ count }) => [st, count || 0] as const)))
@@ -763,19 +767,43 @@ function ResetRequests() {
   }
   async function go() {
     if (word.trim() !== RESET_WORD) return;
-    setBusy('กำลังลบไฟล์แนบ…');
+    if (locked) return;
+    setBusy('กำลังรวบรวมไฟล์แนบ…');
     const files = await paths('request_files');
     const letters = await paths('requests');
-    for (let i = 0; i < files.length; i += 100) await sb.storage.from('attachments').remove(files.slice(i, i + 100));
-    for (let i = 0; i < letters.length; i += 100) await sb.storage.from('letters').remove(letters.slice(i, i + 100));
+    // the database first: if it refuses (e.g. locked after go-live), no file is touched
     setBusy('กำลังลบคำขอ…');
     const { ok, data } = await run<number>('admin-reset-requests', sb.rpc('admin_reset_requests', { p_confirm: word.trim() }));
+    if (ok) {
+      setBusy('กำลังลบไฟล์แนบ…');
+      for (let i = 0; i < files.length; i += 100) await sb.storage.from('attachments').remove(files.slice(i, i + 100));
+      for (let i = 0; i < letters.length; i += 100) await sb.storage.from('letters').remove(letters.slice(i, i + 100));
+    }
     setBusy('');
     if (ok) {
       setWord('');
       toast('ok', 'ล้างข้อมูลคำขอแล้ว · Requests cleared', `ลบ ${data ?? 0} คำขอ`);
       refresh();
     }
+  }
+  async function lock() {
+    if (lockWord.trim().toUpperCase() !== LOCK_WORD) return;
+    setBusy('กำลังล็อก…');
+    const { ok } = await run('admin-lock-production', sb.rpc('admin_lock_production', { p_confirm: lockWord.trim() }));
+    setBusy('');
+    if (ok) {
+      setLockWord('');
+      toast('ok', 'ล็อกระบบจริงแล้ว · Production locked', 'ปุ่มลบคำขอทั้งหมดถูกปิดถาวร');
+      refresh();
+    }
+  }
+  if (locked) {
+    return (
+      <Section className="card prod-lock">
+        <h2>🔒 ระบบใช้งานจริงแล้ว · Live (locked after go-live)</h2>
+        <span className="note">ล็อกเมื่อ {settings?.prod_locked_at ? dt(settings.prod_locked_at) : '—'} · การ<b>ลบคำขอทั้งหมด</b>ถูกปิดถาวร เพื่อป้องกันข้อมูลจริงหายจากการกดผิด · ปลดล็อกได้เฉพาะผู้ดูแลฐานข้อมูลใน Supabase SQL Editor</span>
+      </Section>
+    );
   }
   return (
     <Section className="card danger-zone">
@@ -802,6 +830,17 @@ function ResetRequests() {
           {busy || `ลบคำขอทั้งหมด ${total} ใบ · Delete all`}
         </button>
       </div>
+      <hr style={{ border: 0, borderTop: '1px solid var(--line)', margin: '6px 0', width: '100%' }} />
+      <h3 style={{ margin: 0 }}>🔒 ล็อกระบบจริง (วัน Go-Live) · Lock for go-live</h3>
+      <span className="note">ทำ<b>หลังล้างข้อมูลทดสอบ</b> ก่อนเปิดให้ผู้ใช้เริ่มใช้งานจริง · เมื่อล็อกแล้ว ปุ่มลบคำขอทั้งหมดหายไปถาวร (การตั้งค่าอื่นใช้ได้ตามปกติ) · ปลดล็อกได้เฉพาะใน Supabase SQL Editor</span>
+      {hasLock ? (
+        <div className="row" style={{ gap: 10, alignItems: 'flex-end' }}>
+          <label className="f" htmlFor="lock-word" style={{ flex: '1 1 260px' }}>พิมพ์คำว่า <b>{LOCK_WORD}</b> เพื่อยืนยัน · Type to confirm
+            <input className="in" id="lock-word" value={lockWord} autoComplete="off" onChange={(e) => setLockWord(e.target.value)} placeholder={LOCK_WORD} />
+          </label>
+          <button className="btn p" id="lock-go" disabled={lockWord.trim().toUpperCase() !== LOCK_WORD || !!busy} onClick={lock}>ล็อกระบบจริง · Lock</button>
+        </div>
+      ) : <span className="note" style={{ color: 'var(--bad)' }}>ยังใช้ไม่ได้ — ต้องรัน SQL 0027 ก่อน · Run SQL 0027 first</span>}
     </Section>
   );
 }
