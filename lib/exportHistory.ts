@@ -60,7 +60,7 @@ export async function exportHistory(rows: Row[], ctx: Ctx, filename: string) {
       for (const x of parts)
         itemData.push([
           T(r.no || 'ฉบับร่าง'), T(ST[r.status]?.[0] || r.status), N(x.k + 1, '0'), T(x.it.sku), T(x.it.product_name), T(x.it.description),
-          N(x.it.qty, '#,##0.####'), T(x.it.unit), T(x.vendor), N(x.qty, '#,##0.####'), N(x.net), N(x.line), T(x.split ? 'แบ่งซื้อ' : ''), T(x.it.award_reason),
+          N(x.it.qty, '#,##0.####'), T(x.it.unit), T(x.vendor), N(x.qty, '#,##0.####'), N(x.net, '#,##0.00##'), N(x.line), T(x.split ? 'แบ่งซื้อ' : ''), T(x.it.award_reason),
         ]);
   }
   await writeExcelFile([

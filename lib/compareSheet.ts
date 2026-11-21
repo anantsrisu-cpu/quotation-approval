@@ -9,6 +9,7 @@
  * headings repeat; totals, warranty / lead time / payment term, remarks and
  * signatures come at the end of the last sheet.
  */
+import { fmt, fmtP, fmtQty } from './format';
 
 export interface SheetItem {
   sku: string;
@@ -83,9 +84,10 @@ const INNER_W = SHEET_W - PAD_X * 2;
 
 const esc = (v: unknown) =>
   String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string);
-const money = (n: number | null | undefined) =>
-  n == null || !isFinite(n) ? '' : Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const qtyFmt = (n: number) => Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 3 });
+const money = (n: number | null | undefined) => (n == null || !isFinite(n) ? '' : fmt(n));
+/** unit prices: 2–4 decimals (26.7625) */
+const price = (n: number | null | undefined) => (n == null || !isFinite(n) ? '' : fmtP(n));
+const qtyFmt = (n: number) => fmtQty(n);
 const dmy = (s?: string | null) => {
   if (!s) return '';
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
@@ -170,7 +172,7 @@ function layoutCols(d: SheetData) {
   const per = perVendor(d);
   const len = (xs: string[]) => Math.max(1, ...xs.map((x) => x.length));
   const qLen = len(d.items.map((it) => qtyFmt(it.qty)));
-  const uLen = len(d.vendors.flatMap((v) => v.net.map((x) => money(x))));
+  const uLen = len(d.vendors.flatMap((v) => v.net.map((x) => price(x))));
   const lLen = len(d.vendors.flatMap((v) => [...v.line, v.subtotal, v.total].map((x) => money(x))));
   const base = nv <= 3 ? 10 : nv <= 5 ? 9.5 : 8.5;
   const fixedOther = 32 + 76 + 58 + 40 + 84; // item, part no., brand, unit, previous price
@@ -236,7 +238,7 @@ function rowHtml(d: SheetData, k: number) {
   const it = d.items[k];
   const prev =
     it.prevPrice != null
-      ? `${money(it.prevPrice)}${it.prevVendor || it.prevDate ? `<span class="sub">${esc(it.prevVendor || '')}${it.prevVendor && it.prevDate ? ' / ' : ''}${esc(dmy(it.prevDate))}</span>` : ''}`
+      ? `${price(it.prevPrice)}${it.prevVendor || it.prevDate ? `<span class="sub">${esc(it.prevVendor || '')}${it.prevVendor && it.prevDate ? ' / ' : ''}${esc(dmy(it.prevDate))}</span>` : ''}`
       : '';
   return `<tr data-k="${k}"><td class="c">${k + 1}</td><td>${esc(it.sku)}</td><td>${esc(it.name)}${it.description ? `<div class="desc">${esc(it.description)}</div>` : ''}${it.reportNo ? `<div class="desc">เลขที่ใบขอซื้อ ${esc(it.reportNo)}</div>` : ''}${it.vatNote ? `<div class="desc vat">${esc(it.vatNote)}</div>` : ''}</td>
 <td>${esc(it.brand || '')}</td><td class="n">${qtyFmt(it.qty)}</td><td class="c">${esc(it.unit)}</td><td class="n" style="white-space:normal;text-align:right">${prev}</td>
@@ -252,7 +254,7 @@ ${d.vendors
     const qcell = split3 ? `<td class="n${q != null ? ' won' : ''}">${q != null ? qtyFmt(q) : ''}</td>` : '';
     // ซื้อหลายเจ้า: this vendor did not quote the item
     if (!(v.unit[k] > 0)) return `${qcell}<td class="n na">ไม่ได้เสนอ</td><td class="n na">-</td>`;
-    return `${qcell}<td class="n">${money(v.net[k])}${disc ? `<span class="sub">${money(v.unit[k])} ลด ${esc(disc)}</span>` : ''}</td><td class="n${won ? ' won' : ''}">${won ? '<span class="tk" aria-label="สั่งซื้อ">✓</span>' : ''}${money(v.line[k])}${share}</td>`;
+    return `${qcell}<td class="n">${price(v.net[k])}${disc ? `<span class="sub">${price(v.unit[k])} ลด ${esc(disc)}</span>` : ''}</td><td class="n${won ? ' won' : ''}">${won ? '<span class="tk" aria-label="สั่งซื้อ">✓</span>' : ''}${money(v.line[k])}${share}</td>`;
   })
   .join('')}</tr>`;
 }

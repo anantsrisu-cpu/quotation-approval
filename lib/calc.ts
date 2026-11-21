@@ -1,4 +1,4 @@
-import { num, r2 } from './format';
+import { num, r2, r4 } from './format';
 import type { Comparison, DeliverySlot, LineItem, RequestRow, VatMode } from './types';
 
 /** Line item as typed on the form (strings so half-typed numbers stay editable). */
@@ -45,7 +45,7 @@ export const VAT_MODES: { v: VatMode; label: string; th: string }[] = [
 ];
 export const vatModeOf = (m: unknown): VatMode => (m === 'inc' || m === 'zero' ? m : 'ex');
 /** a price as quoted → before VAT (same as the database, 0021) */
-export const exPrice = (p: number, mode: VatMode, rate: number) => (mode === 'inc' ? r2(p / (1 + rate)) : p);
+export const exPrice = (p: number, mode: VatMode, rate: number) => (mode === 'inc' ? r4(p / (1 + rate)) : p);
 /** line total before VAT from the net unit price as quoted: an inc line is converted once, on the whole line */
 export const lineEx = (net: number, qty: number, mode: VatMode, rate: number) => (mode === 'inc' ? r2((net * qty) / (1 + rate)) : r2(net * qty));
 
@@ -62,17 +62,17 @@ const DISC_RE = /^[0-9]+(\.[0-9]+)?%?(\+[0-9]+(\.[0-9]+)?%?)*$/;
  */
 export function applyDiscount(price: number, disc: string | null | undefined): { net: number; error: string | null } {
   const d = normDiscount(disc);
-  if (!d) return { net: r2(price), error: null };
-  if (!DISC_RE.test(d)) return { net: r2(price), error: 'รูปแบบส่วนลดไม่ถูกต้อง ใช้ 5% หรือ 100 หรือ 10%+5%' };
+  if (!d) return { net: r4(price), error: null };
+  if (!DISC_RE.test(d)) return { net: r4(price), error: 'รูปแบบส่วนลดไม่ถูกต้อง ใช้ 5% หรือ 100 หรือ 10%+5%' };
   let net = price;
   for (const part of d.split('+')) {
     if (part.endsWith('%')) {
       const v = parseFloat(part);
-      if (v > 100) return { net: r2(price), error: 'ส่วนลดเกิน 100%' };
+      if (v > 100) return { net: r4(price), error: 'ส่วนลดเกิน 100%' };
       net = (net * (100 - v)) / 100;
     } else net -= parseFloat(part);
   }
-  net = r2(net);
+  net = r4(net);
   if (price > 0 && net <= 0) return { net: 0, error: 'ราคาหลังหักส่วนลดต้องมากกว่า 0' };
   return { net, error: null };
 }

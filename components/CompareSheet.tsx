@@ -2,7 +2,7 @@
 import { useEffect, useLayoutEffect, useRef } from 'react';
 import { useApp } from './AppProvider';
 import { compDiscounts, compNets, compPrices, itemsOf, netOf, normDiscount, vatModeOf } from '@/lib/calc';
-import { dOnly, fmt, r2 } from '@/lib/format';
+import { dOnly, fmtP, r2 } from '@/lib/format';
 import { renderSheet, type SheetData, type SheetSigner, type SheetVendor } from '@/lib/compareSheet';
 import { sheetCompanies, type RequestRow, type RequestStep } from '@/lib/types';
 
@@ -10,7 +10,7 @@ import { sheetCompanies, type RequestRow, type RequestStep } from '@/lib/types';
 export function vatNote(it: { vat_mode?: string; price_in?: number; net_in?: number; discount?: string }): string {
   const m = vatModeOf(it.vat_mode);
   if (m === 'zero') return 'VAT 0 · รายการนี้ไม่มี VAT';
-  if (m === 'inc') return `ราคาเสนอรวม VAT${it.price_in != null ? ` ${fmt(it.price_in)}${it.net_in != null && it.net_in !== it.price_in ? ` (หลังส่วนลด ${fmt(it.net_in)})` : ''}` : ''} · ในตารางแปลงเป็นราคาก่อน VAT`;
+  if (m === 'inc') return `ราคาเสนอรวม VAT${it.price_in != null ? ` ${fmtP(it.price_in)}${it.net_in != null && it.net_in !== it.price_in ? ` (หลังส่วนลด ${fmtP(it.net_in)})` : ''}` : ''} · ในตารางแปลงเป็นราคาก่อน VAT`;
   return '';
 }
 

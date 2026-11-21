@@ -8,7 +8,7 @@ import { FitSheet } from './SheetViewer';
 import { Loading, Modal, PageHead } from './ui';
 import { VAT_MODES, blankComp, blankItem, calcItems, compDiscounts, compPrices, itemsOf, parseDays, vatModeOf, type DraftComp, type DraftItem } from '@/lib/calc';
 import type { DeliverySlot } from '@/lib/types';
-import { PR_EXAMPLE, PR_FORMAT, PURP, SUBJ, SUBJ_EN, fileSize, fmt, isPr, normPr, num } from '@/lib/format';
+import { PR_EXAMPLE, PR_FORMAT, PURP, SUBJ, SUBJ_EN, fileSize, fmt, fmtP, isPr, normPr, num } from '@/lib/format';
 import { UnitField } from './UnitField';
 import { isPdfFile } from '@/lib/mergePdf';
 import { setDirty } from '@/lib/dirty';
@@ -63,7 +63,7 @@ const MAX_ITEMS = 200;
 const PAGE_ITEMS = 25;
 const PAGE_FROM = 30;
 const skuKey = (s: string) => s.trim().toUpperCase();
-const money = (v: number | null | undefined) => (v ? fmt(v) : '');
+const money = (v: number | null | undefined) => (v ? fmtP(v) : '');
 const normDisc = (v: string) => v.replace(/[\s,]/g, '');
 
 /** Split text copied from Excel into rows of cells (tab separated; a cell with line breaks comes in "quotes"). */
@@ -180,7 +180,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
       const items: DraftItem[] = its.length
         ? its.map((it) => ({ sku: it.sku, description: it.description || '', qty: String(it.qty || 1), unit: it.unit || 'ชิ้น',
             // 0021: an item quoted including VAT is edited as quoted
-            vat: vatModeOf(it.vat_mode), unit_price: money(vatModeOf(it.vat_mode) === 'inc' && it.price_in != null ? it.price_in : it.unit_price), discount: it.discount || '', prev_price: it.prev_price != null ? fmt(it.prev_price) : '', prev_vendor: it.prev_vendor || '', prev_date: it.prev_date || '', brand: it.brand || '', report_no: it.report_no || '',
+            vat: vatModeOf(it.vat_mode), unit_price: money(vatModeOf(it.vat_mode) === 'inc' && it.price_in != null ? it.price_in : it.unit_price), discount: it.discount || '', prev_price: it.prev_price != null ? fmtP(it.prev_price) : '', prev_vendor: it.prev_vendor || '', prev_date: it.prev_date || '', brand: it.brand || '', report_no: it.report_no || '',
             // keep a ✓ only where it differs from the automatic (cheapest) one
             award: it.award != null && it.award !== it.award_auto && !it.split?.length ? it.award : null, award_reason: it.award_reason || '',
             split: it.split?.length ? splitToDraft(it.split) : null, up_reason: it.price_up_reason || '' }))
@@ -469,7 +469,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
   }
   c.priceUp.forEach((u, k) => {
     if (u && !d.items[k].up_reason.trim())
-      missing.push(`รายการที่ ${k + 1}: ราคาที่สั่งซื้อ ${fmt(u.hi)} สูงกว่าราคาประวัติเก่า ${fmt(u.prev)} — ระบุเหตุผลที่ซื้อแม้ราคาสูงกว่าเดิม · Reason for buying above the previous price`);
+      missing.push(`รายการที่ ${k + 1}: ราคาที่สั่งซื้อ ${fmtP(u.hi)} สูงกว่าราคาประวัติเก่า ${fmtP(u.prev)} — ระบุเหตุผลที่ซื้อแม้ราคาสูงกว่าเดิม · Reason for buying above the previous price`);
   });
   if (!files.length) missing.push('แนบใบเสนอราคาอย่างน้อย 1 ไฟล์ · Attach at least one quotation file');
   files.filter((f) => !isPdfFile(f)).forEach((f) => missing.push(`ไฟล์แนบ “${f.name}” ไม่ใช่ PDF — ลบแล้วแนบใหม่เป็น PDF · Attachments must be PDF`));
@@ -905,7 +905,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
                     <div className="f price-f">
                       <label htmlFor={`up${i}`}>ราคา/หน่วย {L.mode === 'inc' ? '(รวม VAT)' : ''} <span className="req">*</span></label>
                       <input className="in r" inputMode="decimal" id={`up${i}`} value={it.unit_price} placeholder={d.multi_vendor ? 'ไม่ได้เสนอ' : '0.00'}
-                        onChange={(e) => setItem(i, { unit_price: e.target.value })} onBlur={() => L.up > 0 && setItem(i, { unit_price: fmt(L.up) })}
+                        onChange={(e) => setItem(i, { unit_price: e.target.value })} onBlur={() => L.up > 0 && fmtP(L.up) !== it.unit_price && setItem(i, { unit_price: fmtP(L.up) })}
                         onPaste={(e) => pasteDown(e, (k, v) => setItem(k, { unit_price: v }), i)} />
                       {/* 0021: how this item's prices were quoted (applies to every vendor's price of this item) */}
                       <div className="vat-seg" role="radiogroup" aria-label={`ราคาของรายการที่ ${i + 1} · VAT`}>
@@ -914,7 +914,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
                             title={m.th} onClick={() => setItem(i, { vat: m.v })}>{m.label}</button>
                         ))}
                       </div>
-                      {L.mode === 'inc' && L.up > 0 && <span className="note vat-hint" id={`vh${i}`}>ก่อน VAT {fmt(L.netEx)} / หน่วย</span>}
+                      {L.mode === 'inc' && L.up > 0 && <span className="note vat-hint" id={`vh${i}`}>ก่อน VAT {fmtP(L.netEx)} / หน่วย</span>}
                       {L.mode === 'zero' && <span className="note vat-hint" id={`vh${i}`}>รายการนี้ไม่คิด VAT</span>}
                     </div>
                     <label className="f" htmlFor={`disc${i}`}>ส่วนลด
@@ -931,7 +931,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
                     </label>
                     <label className="f" htmlFor={`pp${i}`}>ราคาประวัติเก่า/หน่วย
                       <input className="in r" inputMode="decimal" id={`pp${i}`} value={it.prev_price} placeholder="ไม่บังคับ"
-                        onChange={(e) => setItem(i, { prev_price: e.target.value })} onBlur={() => L.prev != null && L.prev > 0 && setItem(i, { prev_price: fmt(L.prev) })}
+                        onChange={(e) => setItem(i, { prev_price: e.target.value })} onBlur={() => L.prev != null && L.prev > 0 && fmtP(L.prev) !== it.prev_price && setItem(i, { prev_price: fmtP(L.prev) })}
                         onPaste={(e) => pasteDown(e, (k, v) => setItem(k, { prev_price: v }), i)} />
                     </label>
                     <label className="f" htmlFor={`pv${i}`}>ซื้อจากบริษัท
@@ -950,7 +950,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
                     // 0023: buying above the previous price needs a reason (no previous price = no check)
                     <div className="up-box" id={`upb${i}`}>
                       <label className="f" htmlFor={`upr${i}`}>
-                        <span>⚠ ราคาที่สั่งซื้อ <b>{fmt(c.priceUp[i]!.hi)}</b> สูงกว่าราคาประวัติเก่า <b>{fmt(c.priceUp[i]!.prev)}</b> (+{c.priceUp[i]!.pct?.toFixed(2)}%) — เหตุผลที่สั่งซื้อแม้ราคาสูงกว่าเดิม <span className="req">*</span></span>
+                        <span>⚠ ราคาที่สั่งซื้อ <b>{fmtP(c.priceUp[i]!.hi)}</b> สูงกว่าราคาประวัติเก่า <b>{fmtP(c.priceUp[i]!.prev)}</b> (+{c.priceUp[i]!.pct?.toFixed(2)}%) — เหตุผลที่สั่งซื้อแม้ราคาสูงกว่าเดิม <span className="req">*</span></span>
                         <input className="in" id={`upr${i}`} value={it.up_reason} maxLength={500} aria-invalid={tried && !it.up_reason.trim()}
                           placeholder="เช่น วัตถุดิบปรับราคาขึ้นทั้งตลาด / ผู้ขายเดิมไม่มีของ / ต้องการด่วน"
                           onChange={(e) => setItem(i, { up_reason: e.target.value })} />
@@ -971,7 +971,7 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
                         </span>
                       )}
                     {L.discErr ? <span style={{ color: 'var(--bad)', fontWeight: 600 }}>ส่วนลด: {L.discErr}</span>
-                      : L.hasDisc && L.up > 0 && <span className="chip st-draft num">ราคาสุทธิ {fmt(L.net)} / {it.unit} (ลด {fmt(L.up - L.net)})</span>}
+                      : L.hasDisc && L.up > 0 && <span className="chip st-draft num">ราคาสุทธิ {fmtP(L.net)} / {it.unit} (ลด {fmtP(L.up - L.net)})</span>}
                     {L.pct != null && (
                       <span className={'chip ' + (L.pct > 0 ? 'st-bad' : 'st-ok')} title="เทียบราคาก่อนหน้า · vs previous price">
                         {L.pct > 0 ? '▲' : L.pct < 0 ? '▼' : '='} {L.pct > 0 ? '+' : ''}{L.pct.toFixed(2)}% {L.hasDisc ? 'ราคาสุทธิ' : ''}จากราคาก่อนหน้า
@@ -1099,9 +1099,9 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
                       </td>
                       <td className="num" style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>{it.qty} {it.unit}</td>
                       <td className={`num sel${(a.split ? a.split.some((x) => x.v === 0) : a.pick === 0) ? ' won' : ''}`} style={{ textAlign: 'right' }}>
-                        {d.multi_vendor && !(c.lines[k].up > 0) ? <span className="note">ไม่ได้เสนอ</span> : fmt(c.lines[k].up)}
-                        {c.lines[k].hasDisc && <div className="note">ลด {normDisc(it.discount)} → {fmt(c.lines[k].net)}</div>}
-                        {c.modes[k] === 'inc' && c.lines[k].up > 0 && <div className="note">ก่อน VAT {fmt(c.lines[k].netEx)}</div>}
+                        {d.multi_vendor && !(c.lines[k].up > 0) ? <span className="note">ไม่ได้เสนอ</span> : fmtP(c.lines[k].up)}
+                        {c.lines[k].hasDisc && <div className="note">ลด {normDisc(it.discount)} → {fmtP(c.lines[k].net)}</div>}
+                        {c.modes[k] === 'inc' && c.lines[k].up > 0 && <div className="note">ก่อน VAT {fmtP(c.lines[k].netEx)}</div>}
                         {c.lines[k].up > 0 && <div className="note">= {fmt(c.lines[k].line)}</div>}
                         {it.split ? splitCell(k, 0, a) : tick(k, 0, a)}
                       </td>
@@ -1109,14 +1109,14 @@ export function RequestForm({ draftId, copyFrom, forUser }: { draftId?: string |
                         <td key={ci} className={(a.split ? a.split.some((x) => x.v === ci + 1) : a.pick === ci + 1) ? 'won' : undefined}>
                           <input className="in r" inputMode="decimal" id={`cp${ci}-${k}`} aria-label={`ราคาต่อหน่วย ${x.vendor || `คู่เทียบ ${ci + 1}`} รายการที่ ${k + 1}`} value={x.prices[k] ?? ''} placeholder={d.multi_vendor ? 'ไม่ได้เสนอ' : '0.00'}
                             onChange={(e) => setPrice(ci, k, e.target.value)}
-                            onBlur={() => { const v = num(x.prices[k]); if (v > 0) setPrice(ci, k, fmt(v)); }}
+                            onBlur={() => { const v = num(x.prices[k]); if (v > 0 && fmtP(v) !== x.prices[k]) setPrice(ci, k, fmtP(v)); }}
                             onPaste={(e) => pasteDown(e, (m, v) => setPrice(ci, m, v), k)} />
                           <input className="in r disc" id={`cd${ci}-${k}`} aria-label={`ส่วนลด ${x.vendor || `คู่เทียบ ${ci + 1}`} รายการที่ ${k + 1}`} value={x.discounts[k] ?? ''} placeholder="ส่วนลด 5% / 100"
                             aria-invalid={!!c.comps[ci]?.lines[k]?.discErr} style={c.comps[ci]?.lines[k]?.discErr ? { borderColor: 'var(--bad)' } : undefined}
                             onChange={(e) => setPrice(ci, k, e.target.value, 'discounts')}
                             onPaste={(e) => pasteDown(e, (m, v) => setPrice(ci, m, v, 'discounts'), k)} />
                           <div className="note num" style={{ textAlign: 'right', color: c.comps[ci]?.lines[k]?.discErr ? 'var(--bad)' : undefined }}>
-                            {c.comps[ci]?.lines[k]?.discErr || (c.comps[ci]?.lines[k]?.up > 0 && <>{c.comps[ci]?.lines[k]?.hasDisc && <>สุทธิ {fmt(c.comps[ci]?.lines[k]?.net)} · </>}{c.modes[k] === 'inc' && <>ก่อน VAT {fmt(c.comps[ci]?.lines[k]?.netEx)} · </>}= {fmt(c.comps[ci]?.lines[k]?.line)}</>)}
+                            {c.comps[ci]?.lines[k]?.discErr || (c.comps[ci]?.lines[k]?.up > 0 && <>{c.comps[ci]?.lines[k]?.hasDisc && <>สุทธิ {fmtP(c.comps[ci]?.lines[k]?.net)} · </>}{c.modes[k] === 'inc' && <>ก่อน VAT {fmtP(c.comps[ci]?.lines[k]?.netEx)} · </>}= {fmt(c.comps[ci]?.lines[k]?.line)}</>)}
                           </div>
                           {it.split ? splitCell(k, ci + 1, a) : tick(k, ci + 1, a)}
                         </td>

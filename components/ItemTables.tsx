@@ -1,7 +1,7 @@
 'use client';
 import { compDiscounts, compNets, compPrices, daysText, itemsOf, netOf, normDiscount, vatModeOf } from '@/lib/calc';
 import { upNote, vatNote } from './CompareSheet';
-import { dOnly, fmt, fmtQty, r2 } from '@/lib/format';
+import { dOnly, fmt, fmtP, fmtQty, r2 } from '@/lib/format';
 import type { DeliverySlot, LineItem, RequestRow } from '@/lib/types';
 
 /** Vendor ticked ✓ for each item (older requests: everything from the main vendor). */
@@ -86,8 +86,8 @@ export function ItemsTable({ r }: { r: RequestRow }) {
             {upNote(it) && <div className="note vat-note">{upNote(it)}</div>}
             <dl className="m-kv">
               <div><dt>จำนวน</dt><dd>{fmtQty(it.qty)} {it.unit}</dd></div>
-              {sp.length ? <div><dt>ราคา/หน่วย</dt><dd>แบ่งซื้อ</dd></div> : <div><dt>ราคา/หน่วย ก่อน VAT</dt><dd>{fmt(b.unit)}{b.disc ? <span className="note"> ลด {b.disc} → <b>{fmt(net)}</b></span> : null}</dd></div>}
-              <div><dt>ราคาก่อนหน้า</dt><dd>{it.prev_price != null ? <>{fmt(it.prev_price)} <PrevPct pct={pct} /></> : <span className="note">—</span>}{(it.prev_vendor || it.prev_date) && <div className="note">{[it.prev_vendor, it.prev_date ? dOnly(it.prev_date) : ''].filter(Boolean).join(' · ')}</div>}</dd></div>
+              {sp.length ? <div><dt>ราคา/หน่วย</dt><dd>แบ่งซื้อ</dd></div> : <div><dt>ราคา/หน่วย ก่อน VAT</dt><dd>{fmtP(b.unit)}{b.disc ? <span className="note"> ลด {b.disc} → <b>{fmtP(net)}</b></span> : null}</dd></div>}
+              <div><dt>ราคาก่อนหน้า</dt><dd>{it.prev_price != null ? <>{fmtP(it.prev_price)} <PrevPct pct={pct} /></> : <span className="note">—</span>}{(it.prev_vendor || it.prev_date) && <div className="note">{[it.prev_vendor, it.prev_date ? dOnly(it.prev_date) : ''].filter(Boolean).join(' · ')}</div>}</dd></div>
               {it.report_no && <div><dt>เลขที่ใบขอซื้อ</dt><dd className="mono">{it.report_no}</dd></div>}
             </dl>
             {multi && (
@@ -152,11 +152,11 @@ export function ItemsTable({ r }: { r: RequestRow }) {
                   )}
                 </td>
                 <td className="num" style={{ ...R, whiteSpace: 'nowrap' }}>{fmtQty(it.qty)} {it.unit}</td>
-                <td className="num" style={R}>{splitOf(it).length ? <span className="note">แบ่งซื้อ</span> : fmt(b.unit)}</td>
+                <td className="num" style={R}>{splitOf(it).length ? <span className="note">แบ่งซื้อ</span> : fmtP(b.unit)}</td>
                 {hasDisc && <td className="num" style={R}>{splitOf(it).length ? '—' : b.disc || '—'}</td>}
-                {hasDisc && <td className="num" style={R}><b>{fmt(net)}</b></td>}
+                {hasDisc && <td className="num" style={R}><b>{fmtP(net)}</b></td>}
                 <td className="num" style={R}>
-                  {it.prev_price != null ? fmt(it.prev_price) : <span className="note">—</span>}
+                  {it.prev_price != null ? fmtP(it.prev_price) : <span className="note">—</span>}
                   {(it.prev_vendor || it.prev_date) && <div className="note" style={{ whiteSpace: 'normal' }}>{[it.prev_vendor, it.prev_date ? dOnly(it.prev_date) : ''].filter(Boolean).join(' · ')}</div>}
                 </td>
                 <td style={R}><PrevPct pct={pct} /></td>
@@ -209,7 +209,7 @@ export function CompareTable({ r }: { r: RequestRow }) {
     const part = partOf(k, v);
     return (
       <>
-        {!(price > 0) ? <span className="note">ไม่ได้เสนอ</span> : disc ? <><span className="note">{fmt(price)} ลด {disc}</span><br /><b>{fmt(net)}</b></> : fmt(price)}
+        {!(price > 0) ? <span className="note">ไม่ได้เสนอ</span> : disc ? <><span className="note">{fmtP(price)} ลด {disc}</span><br /><b>{fmtP(net)}</b></> : fmtP(price)}
         {price > 0 && <div className="note">= {fmt(line)}</div>}
         {won && <div style={{ color: 'var(--sage-ink)', fontWeight: 700 }}>{part ? `✓ แบ่งซื้อ ${part.qty.toLocaleString('en-US')} (${part.pct}%)` : '✓ สั่งซื้อ'}</div>}
       </>
@@ -247,7 +247,7 @@ export function CompareTable({ r }: { r: RequestRow }) {
                   <div className="m-vp">
                     {!(p.price > 0) ? <span className="note">ไม่ได้เสนอ</span> : (
                       <>
-                        <span className="num">{p.disc ? <><span className="note">{fmt(p.price)} ลด {p.disc}</span> <b>{fmt(p.net)}</b></> : fmt(p.price)}<span className="note">/หน่วย</span></span>
+                        <span className="num">{p.disc ? <><span className="note">{fmtP(p.price)} ลด {p.disc}</span> <b>{fmtP(p.net)}</b></> : fmtP(p.price)}<span className="note">/หน่วย</span></span>
                         <span className="num m-line">= {fmt(lineOf(v, k))}</span>
                       </>
                     )}

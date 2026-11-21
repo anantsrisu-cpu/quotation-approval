@@ -28,11 +28,18 @@ export const num = (v: unknown): number => {
   const n = parseFloat(String(v ?? '').replace(/,/g, ''));
   return Number.isFinite(n) ? n : 0;
 };
+// one formatter each, made once: toLocaleString(…, options) builds a new formatter on every call,
+// which was the slowest part of redrawing the request form on each keystroke (INP)
+const NF_2 = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const NF_P = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+const NF_Q = new Intl.NumberFormat('en-US', { maximumFractionDigits: 3 });
 export const r2 = (n: number) => Math.round((n + (n >= 0 ? Number.EPSILON : -Number.EPSILON)) * 100) / 100;
-export const fmt = (n: number | null | undefined) =>
-  Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-export const fmtQty = (n: number | null | undefined) =>
-  Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 3 });
+/** unit prices keep up to 4 decimals (26.7625); line totals and VAT stay at 2 */
+export const r4 = (n: number) => Math.round((n + (n >= 0 ? Number.EPSILON : -Number.EPSILON)) * 10000) / 10000;
+/** a unit price: at least 2 decimals, up to 4 (26.76 · 26.7625) */
+export const fmtP = (n: number | null | undefined) => NF_P.format(Number(n || 0));
+export const fmt = (n: number | null | undefined) => NF_2.format(Number(n || 0));
+export const fmtQty = (n: number | null | undefined) => NF_Q.format(Number(n || 0));
 
 export const dt = (s?: string | null) => {
   if (!s) return '—';
