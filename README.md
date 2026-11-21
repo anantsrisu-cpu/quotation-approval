@@ -114,6 +114,7 @@ Every state change goes through database functions, so amounts, approvers and si
    ต่อด้วย [`supabase/migrations/0024_user_presence.sql`](supabase/migrations/0024_user_presence.sql) กด **Run** (สถานะออนไลน์ของผู้ใช้ สำหรับผู้ดูแล)
    ต่อด้วย [`supabase/migrations/0025_acting_approver.sql`](supabase/migrations/0025_acting_approver.sql) กด **Run** (อนุมัติแทน ช่วงไม่อยู่)
    ต่อด้วย [`supabase/migrations/0026_price_4_decimals.sql`](supabase/migrations/0026_price_4_decimals.sql) กด **Run** (ราคาต่อหน่วยทศนิยม 4 ตำแหน่ง)
+   ต่อด้วย [`supabase/migrations/0027_production_lock.sql`](supabase/migrations/0027_production_lock.sql) กด **Run** (ล็อกระบบจริงหลัง Go-Live · SKU และวงเงินอ่านได้เฉพาะบัญชีที่ใช้งานอยู่)
    > ระบบที่ใช้งานอยู่แล้ว: รันเฉพาะไฟล์ที่ยังไม่เคยรัน ตามลำดับเลข ข้อมูลเดิมถูกแปลงให้อัตโนมัติ และรันซ้ำได้โดยไม่เสียหาย
 4. ไปที่ **Project Settings → API** (หรือ **Data API / API Keys**) จดค่า:
    - **Project URL** → ใช้เป็น `NEXT_PUBLIC_SUPABASE_URL`
@@ -201,6 +202,10 @@ update public.profiles set roles = '{admin,preparer}', status = 'active' where e
 - ทางเลือกอื่น (ไม่แนะนำสำหรับงานประจำ): Vercel → Settings → General → **Pause Project** ปิดเว็บทั้งหมดรวมทั้งผู้ดูแล (ผู้ใช้เห็น error 503 DEPLOYMENT_PAUSED ทดสอบไม่ได้ และกลับมาใช้ได้ภายในไม่กี่นาทีหลังกด Resume) · Supabase Pause project ไม่แนะนำ (ใช้เวลานานในการเปิดกลับ)
 - อัปเดตแพ็กเกจเพื่อความปลอดภัยทุก 1–3 เดือน: `npm outdated`, `npm audit`, แล้วอัปเดต Next.js เป็นเวอร์ชันแพตช์ล่าสุดของ 15.5.x
 
+**ล็อกระบบจริงหลัง Go-Live · Production lock** (SQL 0027) — ผู้ดูแลระบบ → ตั้งค่าระบบ → การ์ด **ล้างข้อมูลทดสอบก่อน Go-Live**
+- วัน Go-Live: ปิดระบบเพื่อปรับปรุง → พิมพ์ `ลบทั้งหมด` ล้างคำขอทดสอบ → พิมพ์ `GO-LIVE` กด **ล็อกระบบจริง** → ทดสอบ → เปิดระบบ
+- เมื่อล็อกแล้ว การ์ดเปลี่ยนเป็น “🔒 ระบบใช้งานจริงแล้ว” และฐานข้อมูลปฏิเสธการลบคำขอทั้งหมดถาวร (การตั้งค่าอื่นใช้ได้ตามปกติ) · ปลดล็อกได้เฉพาะใน Supabase SQL Editor: `update app_settings set prod_locked = false where id = 1;`
+
 **ติดตามความเร็วและปัญหา · Watching speed and problems**
 - ในแอป: **ผู้ดูแลระบบ → สถานะปัญหา** — ข้อผิดพลาดที่ผู้ใช้เจอ (หน้าแสดงผลไม่ได้, บันทึกไม่สำเร็จโดยไม่คาดคิด, สร้าง PDF ไม่ได้) ถูกบันทึกพร้อมผู้ใช้และหน้า; กด “ดูมุมมองผู้ใช้” เพื่อตรวจว่าผู้ใช้คนนั้นเห็นอะไร · หน้าเว็บค้างตั้งแต่ 1 วินาทีขึ้นไปขณะพิมพ์/คลิก (action `slow-interaction`) ถูกบันทึกพร้อมต้นเหตุ: แอปนี้ / ส่วนเสริมของเบราว์เซอร์ / Vercel toolbar / เบราว์เซอร์เอง (Edge, Chrome) · ไม่บันทึกตอนลากไฟล์จาก Windows เข้ามา (Windows เตรียมไฟล์ ไม่ใช่หน้าเว็บค้าง) เว้นแต่โค้ดของแอปเป็นตัวช้า · หน้าที่บันทึกคือหน้าที่ค้างจริง
 - ป๊อปอัป **INP Issue** บนหน้าเว็บมาจาก **Vercel Toolbar** (เห็นเฉพาะสมาชิกทีม Vercel ผู้ใช้ทั่วไปไม่เห็น) ตัว toolbar เองทำให้ตัวเลขสูงขึ้น วัดในแอปจริงจำลองเครื่องช้า 6 เท่า การพิมพ์/คลิกในฟอร์มคำขอไม่เกินราว 80ms (เกณฑ์ดี < 200ms) · ปิด toolbar ได้ที่ Vercel → Settings → General → Vercel Toolbar → Production: Off
@@ -274,6 +279,7 @@ psql -d qa_test -v ON_ERROR_STOP=1 -f supabase/tests/99e_price_up_reason_test.sq
 psql -d qa_test -v ON_ERROR_STOP=1 -f supabase/tests/99f_user_presence_test.sql      # runs 0024 itself; ends with: ALL 0024 TESTS PASSED
 psql -d qa_test -v ON_ERROR_STOP=1 -f supabase/tests/99g_acting_approver_test.sql    # runs 0025 itself; ends with: ALL 0025 TESTS PASSED
 psql -d qa_test -v ON_ERROR_STOP=1 -f supabase/tests/99h_price_4_decimals_test.sql   # runs 0026 itself; ends with: ALL 0026 TESTS PASSED
+psql -d qa_test -v ON_ERROR_STOP=1 -f supabase/tests/99i_production_lock_test.sql    # runs 0027 itself; ends with: ALL 0027 TESTS PASSED
 ```
 ครอบคลุม · Covers: first admin, applications, self-promotion blocked, server-side amounts and tiers, approver resolution by department, signatures required, forward rules, reject → reopen → resend (keeps number), admin remind/reassign/cancel, letter path rules, visibility for outsiders, disabled accounts.
 
